@@ -17,6 +17,7 @@
 #include <LCD.h>
 #include <LiquidCrystal_I2C.h>
 #include "DHT.h"
+#include <SFE_BMP180.h>
 
 
 
@@ -35,16 +36,17 @@
 
 
 #define HALFSTEP 8
-LiquidCrystal_I2C *lcd=NULL;                   
-SoftwareSerial *BTSerial=NULL;
-NewPing *sonarf=NULL;
-CP_SonicSensor *sonic=NULL; 
-DESP_Gyro *dspgyro=NULL;
-Servo *serv=NULL; 
-Speaker* speak=NULL; 
-DHT*  dht=NULL;
+LiquidCrystal_I2C *lcd=NULL;  //Serial LCD                   
+SoftwareSerial *BTSerial=NULL; //BlueTooth Serial comm
+NewPing *sonarf=NULL; //UltraSonic Sensor
+CP_SonicSensor *sonic=NULL; //UltraSonic Sensor
+DESP_Gyro *dspgyro=NULL; //Gyroscope 
+Servo *serv=NULL; //MicroServo SG90
+Speaker* speak=NULL; //Buzzer just a pin
+DHT*  dht=NULL; //temp sensor DHT
+SFE_BMP180* bmp=NULL; //Barometric Sensor SDA/SCL
   
-  
+double relP,Pres,bmpTemp;  //Pres=Absolute Pressure, relP= Pressure at sea level, bmpTemp=Temperature
 
 DESP_Interpreter interpreter;
                                    
@@ -478,7 +480,25 @@ int evalvarfunc(DspCommand *cmd,int varidx){
               sonic->checkStatus();
               return sonic->distanceFront();              
           break;
-          
+     case 78://relP
+             // devce=getDeviceById(cmd->devid);  
+              //bmp=(SFE_BMP180*)((void*)(devce->devpointer)); no need only one device
+              getPressure();
+              return relP;
+          break;    
+     case 79://Pres
+              getPressure();
+              return Pres;
+           break;   
+     case 80://bmpTemp
+              getPressure();
+              return bmpTemp;
+           break;
+     case 81://Moisture or other analog read device
+             devce=getDeviceById(cmd->devid);  
+             return analogRead(getDevicePin(cmd->devid,1));
+             break;
+      
   }
 }
                                   
@@ -575,6 +595,18 @@ boolean evalfunc(DspCommand *cmd){
                 retval=d;
                 //setDevicePin(cmd->devid,3,v);
           break;
+       case 166://eval if moisture > %p2 or other analog read device
+                devce=getDeviceById(cmd->devid);  
+                pin1=getDevicePin(cmd->devid,1);
+                v=analogRead(pin1);
+                retval=v>checkparam;
+                break;     
+       case 167://eval if moisture < %p2  or other analog read device
+                devce=getDeviceById(cmd->devid);  
+                pin1=getDevicePin(cmd->devid,1);
+                v=analogRead(pin1);
+                retval=v<checkparam;
+                break;     
        case 171: //eval if temp>%p2   
                 devce=getDeviceById(cmd->devid);
                 dht=(DHT*)((void*)(devce->devpointer));
@@ -603,6 +635,18 @@ boolean evalfunc(DspCommand *cmd){
                 t=round(dht->readHumidity());
                 retval=t<checkparam;                
           break;
+        case 177://eval if press>%p2
+                getPressure();
+                retval=Pres<checkparam;
+                break;
+        case 178://eval if relp>%p2
+                getPressure();
+                retval=relP<checkparam;
+                break;
+        case 179://eval if bmptemp>%p2
+                getPressure();
+                retval=bmpTemp<checkparam;
+                break;
           
   }
   if (cmd->param1!=1)  return retval; else return !retval; //param1 is the not command so it negates the result if set
@@ -834,6 +878,13 @@ boolean programExecute(){
        //case 162://eval if distance traveled > %p2 in CM
        //case 163://eval if distance traveled < %p2 in CM
 
+       case 165://Setup Moisture sensor analog pin device just read this or other analog read device
+                pinMode(cmd->param1,INPUT);
+                setDevicePin(cmd->devid,1,cmd->param1);//no vars on setup
+                break;
+             //81 moisture fix variable or other analog read device
+       //case 166 //eval if moisture > %p2 or other analog read device
+       //case 167 //eval if moisture < %p2 or other analog read device
        case 170: //DHT temperature setup
                // DoDebug(F("Setup Temp"),cmd->param1);
                 devce=getDeviceById(cmd->devid);  
@@ -850,7 +901,19 @@ boolean programExecute(){
        //case 172 //eval if temp<%p2       
        //case 173 //eval if humidity>%p2
        //case 174 //eval if humidity<%p2       
-       
+       case 176://BMP180 barometric Setup ONLY ONE SDA/SCL Device
+                devce=getDeviceById(cmd->devid);
+                bmp=new SFE_BMP180;
+                devce->devpointer=(int)(bmp);
+                if (bmp->begin())
+                   Serial.println(F("BMP180 init success"));
+                else
+                    Serial.println(F("BMP180 init fail\n\n"));    
+                break;  
+                //78,79,80 are the device variables
+       //case 177// eval if Pres>%p2           
+       //case 178// eval if relP>%p2           
+       //case 179// eval if bmpTemp>%p2
        case 200:          
                 n=interpreter.getParam1(cmd);            
                 pinMode(n, OUTPUT);
@@ -975,6 +1038,104 @@ float getGyroDeviation(){
   else
    return 0;
 }
+
+
+#define ALTITUDE 280.0 
+void getPressure(){
+  char status;
+  double T,P,p0,a;
+  
+
+  if (bmp==NULL) exit;
+
+  status = bmp->startTemperature();
+  if (status != 0)
+  {
+    // Wait for the measurement to complete:
+    delay(status);
+
+    // Retrieve the completed temperature measurement:
+    // Note that the measurement is stored in the variable T.
+    // Function returns 1 if successful, 0 if failure.
+
+    status = bmp->getTemperature(T);
+    if (status != 0)
+    {
+      // Print out the measurement:
+    //  Serial.print("temperature: ");
+    //  Serial.print(T,2);
+    //  Serial.print(" deg C, ");
+    //  Serial.print((9.0/5.0)*T+32.0,2);
+    //  Serial.println(" deg F");
+
+      bmpTemp=T;
+      // Start a pressure measurement:
+      // The parameter is the oversampling setting, from 0 to 3 (highest res, longest wait).
+      // If request is successful, the number of ms to wait is returned.
+      // If request is unsuccessful, 0 is returned.
+
+      status = bmp->startPressure(3);
+      if (status != 0)
+      {
+        // Wait for the measurement to complete:
+        delay(status);
+
+        // Retrieve the completed pressure measurement:
+        // Note that the measurement is stored in the variable P.
+        // Note also that the function requires the previous temperature measurement (T).
+        // (If temperature is stable, you can do one temperature measurement for a number of pressure measurements.)
+        // Function returns 1 if successful, 0 if failure.
+
+        status = bmp->getPressure(P,T);
+        if (status != 0)
+        {
+          // Print out the measurement:
+         // Serial.print("absolute pressure: ");
+         // Serial.print(P,2);
+         // Serial.print(" mb, ");
+         // Serial.print(P*0.0295333727,2);
+         // Serial.println(" inHg");
+
+          Pres=P;
+          // The pressure sensor returns abolute pressure, which varies with altitude.
+          // To remove the effects of altitude, use the sealevel function and your current altitude.
+          // This number is commonly used in weather reports.
+          // Parameters: P = absolute pressure in mb, ALTITUDE = current altitude in m.
+          // Result: p0 = sea-level compensated pressure in mb
+
+          p0 = bmp->sealevel(P,ALTITUDE); // we're at 1655 meters (Boulder, CO)
+          //Serial.print("relative (sea-level) pressure: ");
+          //Serial.print(p0,2);
+          //Serial.print(" mb, ");
+          //Serial.print(p0*0.0295333727,2);
+          //Serial.println(" inHg");
+
+          relP=p0;
+          
+          
+          // On the other hand, if you want to determine your altitude from the pressure reading,
+          // use the altitude function along with a baseline pressure (sea-level or other).
+          // Parameters: P = absolute pressure in mb, p0 = baseline pressure in mb.
+          // Result: a = altitude in m.
+
+       //   a = bmp.altitude(P,p0);
+        //  Serial.print("computed altitude: ");
+         // Serial.print(a,0);
+         // Serial.print(" meters, ");
+         // Serial.print(a*3.28084,0);
+         // Serial.println(" feet");}
+        }
+        else Serial.println(F("error retrieving pressure\n"));
+      }
+      else Serial.println(F("error starting pressure\n"));
+    }
+    else Serial.println(F("error retrieving temperature\n"));
+  }
+  else Serial.println(F("error starting temperature\n"));
+
+  
+}
+
 
 unsigned long looptm=0;
 unsigned long functm=0;
