@@ -506,12 +506,15 @@ boolean evalfunc(DspCommand *cmd){
   
   boolean retval=true;  
   int checkparam;
+  int paramtocheck;
+  int opnd;
   int pin1;
   int v,p,d,t;
   actdevice* devce; 
   
   DoDebug(F("testing:"),cmd->cmdid);
   checkparam=interpreter.getParam2(cmd);
+  opnd=interpreter.getParam1(cmd);
   switch(cmd->cmdid){
      case 70:                                       
             // DoDebug("LOOP COMMAND",0);
@@ -545,11 +548,17 @@ boolean evalfunc(DspCommand *cmd){
           break;     
      case 93:              
           break;     
-     case 94:                      
-          retval=digitalRead(checkparam)==HIGH;
+     case 94:      
+          paramtocheck=digitalRead(checkparam);
+          checkparam=HIGH;
+          opnd=4; //equal
+          //retval=digitalRead(checkparam)==HIGH;
           break;     
      case 95:                     
-          retval=digitalRead(checkparam)==LOW;
+          paramtocheck=digitalRead(checkparam);
+          checkparam=LOW;
+          opnd=4; //equal     
+          //retval=digitalRead(checkparam)==LOW;
           break;     
      case 96:  
           break;     
@@ -558,24 +567,30 @@ boolean evalfunc(DspCommand *cmd){
      case 98:  
           break;                 
      case 136: // //136 if IR distance>%p1
+            
                devce=getDeviceById(cmd->devid);  
                pin1=getDevicePin(cmd->devid,1);
-               retval=digitalRead(pin1)==LOW;               
+               paramtocheck=digitalRead(pin1);
+               checkparam=LOW;
+               opnd=4; //equal  
+               //retval=digitalRead(pin1)==LOW;               
           break;          
      case 141: //distance>
                devce=getDeviceById(cmd->devid);  
                sonic=(CP_SonicSensor*)((void*)(devce->devpointer));
                sonic->checkStatus();
-               DoDebug(F("Distance"),sonic->distanceFront());
-               retval=sonic->distanceFront() >checkparam;          
+             //  DoDebug(F("Distance"),sonic->distanceFront());
+               paramtocheck=sonic->distanceFront();
+               
+               //retval=sonic->distanceFront() >checkparam;          
           break;
-     case 142://distance<
-               devce=getDeviceById(cmd->devid);  
-               sonic=(CP_SonicSensor*)((void*)(devce->devpointer));
-               sonic->checkStatus();
-               DoDebug(F("Distance"),sonic->distanceFront());
-               retval=sonic->distanceFront() <checkparam;          
-          break;            
+//     case 142://distance<
+//               devce=getDeviceById(cmd->devid);  
+//               sonic=(CP_SonicSensor*)((void*)(devce->devpointer));
+//               sonic->checkStatus();
+//               DoDebug(F("Distance"),sonic->distanceFront());
+//               retval=sonic->distanceFront() <checkparam;          
+//          break;            
      case 146:  //check switch if pressed no params
                 devce=getDeviceById(cmd->devid);  
                 pin1=getDevicePin(cmd->devid,1);
@@ -592,64 +607,100 @@ boolean evalfunc(DspCommand *cmd){
                   setDevicePin(cmd->devid,2,d); //Current value
                   setDevicePin(cmd->devid,4,millis()); //Time value
                 }
-                retval=d;
+                paramtocheck=d;
+                opnd=4;//equal
+                checkparam=HIGH; 
+                //retval=d;
                 //setDevicePin(cmd->devid,3,v);
           break;
        case 166://eval if moisture > %p2 or other analog read device
                 devce=getDeviceById(cmd->devid);  
                 pin1=getDevicePin(cmd->devid,1);
                 v=analogRead(pin1);
-                retval=v>checkparam;
+                paramtocheck=v;
+                //retval=v>checkparam;
                 break;     
-       case 167://eval if moisture < %p2  or other analog read device
-                devce=getDeviceById(cmd->devid);  
-                pin1=getDevicePin(cmd->devid,1);
-                v=analogRead(pin1);
-                retval=v<checkparam;
-                break;     
+//       case 167://eval if moisture < %p2  or other analog read device
+//                devce=getDeviceById(cmd->devid);  
+//                pin1=getDevicePin(cmd->devid,1);
+//                v=analogRead(pin1);
+//                retval=v<checkparam;
+//                break;     
        case 171: //eval if temp>%p2   
                 devce=getDeviceById(cmd->devid);
                 dht=(DHT*)((void*)(devce->devpointer));
                 t=round(dht->readTemperature());
-                DoDebug(F("temp="),t);
-                DoDebug(F("Param="),checkparam);
-                retval=t>checkparam;                
+             //   DoDebug(F("temp="),t);
+             //   DoDebug(F("Param="),checkparam);
+                paramtocheck=t;
+                //retval=t>checkparam;                
           break;
-       case 172: //eval if temp<%p2          
-                devce=getDeviceById(cmd->devid);  
-                dht=(DHT*)((void*)(devce->devpointer));
-                t=round(dht->readTemperature());
-                retval=t<checkparam;
-          break;
+//       case 172: //eval if temp<%p2          
+//                devce=getDeviceById(cmd->devid);  
+//                dht=(DHT*)((void*)(devce->devpointer));
+//                t=round(dht->readTemperature());
+//                retval=t<checkparam;
+//          break;
        case 173: //eval if humidity>%p2      
                 devce=getDeviceById(cmd->devid);  
                 dht=(DHT*)((void*)(devce->devpointer));
                 t=round(dht->readHumidity());
-                DoDebug(F("humid="),t);
-                DoDebug(F("Param="),checkparam);
-                retval=t>checkparam;                                 
+             //   DoDebug(F("humid="),t);
+             //   DoDebug(F("Param="),checkparam);
+                paramtocheck=t;
+                //retval=t>checkparam;                                 
           break;
-       case 174: //eval if humidity<%p2          
-                devce=getDeviceById(cmd->devid);  
-                dht=(DHT*)((void*)(devce->devpointer));
-                t=round(dht->readHumidity());
-                retval=t<checkparam;                
-          break;
+//       case 174: //eval if humidity<%p2          
+//                devce=getDeviceById(cmd->devid);  
+//                dht=(DHT*)((void*)(devce->devpointer));
+//                t=round(dht->readHumidity());
+//                retval=t<checkparam;                
+//          break;
         case 177://eval if press>%p2
                 getPressure();
-                retval=Pres<checkparam;
+                paramtocheck=Pres;
+                //retval=Pres<checkparam;
                 break;
         case 178://eval if relp>%p2
                 getPressure();
-                retval=relP<checkparam;
+                paramtocheck=relP;
+                //retval=relP<checkparam;
                 break;
         case 179://eval if bmptemp>%p2
                 getPressure();
-                retval=bmpTemp<checkparam;
+                paramtocheck=bmpTemp;
+                //retval=bmpTemp<checkparam;
                 break;
           
   }
-  if (cmd->param1!=1)  return retval; else return !retval; //param1 is the not command so it negates the result if set
+  DoDebug(F("PToCheck="),paramtocheck);
+  DoDebug(F("Param="),checkparam);
+  DoDebug(F("Check Opnd="),opnd);
+  switch (opnd){
+    case 0://IS
+           retval=  paramtocheck==checkparam;
+           break;
+    case 1://Not is
+           retval=  !(paramtocheck==checkparam);
+           break;
+    case 2://Greater
+           retval=  paramtocheck>checkparam;
+           break;
+    case 3://Less
+           retval=  paramtocheck<checkparam;
+           break;
+    case 4://Equal
+           retval=  paramtocheck==checkparam;
+           break;
+    case 5://Greater than or equal
+           retval=  paramtocheck>=checkparam;
+           break;
+    case 6://Less than or equal
+           retval=  paramtocheck<=checkparam;
+           break;
+  }
+  
+  return retval;
   
 }
 
