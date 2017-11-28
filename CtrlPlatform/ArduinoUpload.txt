@@ -1,0 +1,7 @@
+Για το ανέβασμα στο Arduino NANO χρησιμοποιούμε αυτή την εντολή:
+avrdude -CC:\avrdude.conf -v -patmega328p -carduino -PCOM8 -b57600 -D -Uflash:w:c:\CtrlPlatform.ino.NANO.hex:i 
+
+Φυσικά αλλάζουμε το path για το avrdude.conf εκει που έχουμε το δικό μας και το path για το αρχείο CtrlPlatform.ino.NANO.hex εκεί που βρίσκεται.
+*** Επίσης προσοχή στην COM PORT αλλάζουμε με την δική μας.
+
+για το UNO χρησιμοποιούμε το αρχείο CtrlPlatform.ino.UNO.hex

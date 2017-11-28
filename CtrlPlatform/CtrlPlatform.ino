@@ -516,7 +516,8 @@ boolean evalfunc(DspCommand *cmd){
   checkparam=interpreter.getParam2(cmd);
   opnd=interpreter.getParam1(cmd);
   switch(cmd->cmdid){
-     case 70:                                       
+     case 70:
+     case 72:                                       
             // DoDebug("LOOP COMMAND",0);
              return true;
              break;
@@ -699,7 +700,8 @@ boolean evalfunc(DspCommand *cmd){
            retval=  paramtocheck<=checkparam;
            break;
   }
-  
+
+  DoDebug(F("Return="),retval);
   return retval;
   
 }
