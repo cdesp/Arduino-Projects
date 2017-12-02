@@ -18,11 +18,14 @@
 #include <LiquidCrystal_I2C.h>
 #include "DHT.h"
 #include <SFE_BMP180.h>
-
+#include "CPRobot.h" //TODO: Should control 2 DCMotors and a Gyro for turning Right and left by certain degrees. Also a photointerrupter to count distance travelled.
+                    //Commands: Forward,backward,Stop, StepForward,StepBackward, Turn Left xx degrees, Turn Right xx degrees.
 
 
 //Define variables 
 
+
+// Defines for LCD Serial
 #define I2C_ADDR          0x27        //Define I2C Address where the PCF8574A is
 #define BACKLIGHT_PIN      3
 #define En_pin             2
@@ -45,8 +48,12 @@ Servo *serv=NULL; //MicroServo SG90
 Speaker* speak=NULL; //Buzzer just a pin
 DHT*  dht=NULL; //temp sensor DHT
 SFE_BMP180* bmp=NULL; //Barometric Sensor SDA/SCL
+DESP_DCMotor* Motor=NULL;//DC Motor
   
 double relP,Pres,bmpTemp;  //Pres=Absolute Pressure, relP= Pressure at sea level, bmpTemp=Temperature
+int motid=0;//Motor ID auto increases for each desp_dcmotor probably not needed
+
+
 
 DESP_Interpreter interpreter;
                                    
@@ -263,14 +270,17 @@ char getCharFromBT(){
 boolean isDeviceSetupCmd(int cmdid)
 {
   switch (cmdid) {
+    case 60:   //DCmotor
     case 110:  //Sound
     case 120:  //LCD
     case 130:  //Laser   
     case 140:  //ultrasonic device
     case 145: //switch
     case 150: //Servo
-    case 160: //    
-    case 170: //temp
+    case 160: //Photointerrupter not working yet   
+    case 165://Moisture 
+    case 170: //temp DHT
+    case 176://BMP180 barometric
         return true;
   }
 
@@ -585,13 +595,6 @@ boolean evalfunc(DspCommand *cmd){
                
                //retval=sonic->distanceFront() >checkparam;          
           break;
-//     case 142://distance<
-//               devce=getDeviceById(cmd->devid);  
-//               sonic=(CP_SonicSensor*)((void*)(devce->devpointer));
-//               sonic->checkStatus();
-//               DoDebug(F("Distance"),sonic->distanceFront());
-//               retval=sonic->distanceFront() <checkparam;          
-//          break;            
      case 146:  //check switch if pressed no params
                 devce=getDeviceById(cmd->devid);  
                 pin1=getDevicePin(cmd->devid,1);
@@ -621,12 +624,6 @@ boolean evalfunc(DspCommand *cmd){
                 paramtocheck=v;
                 //retval=v>checkparam;
                 break;     
-//       case 167://eval if moisture < %p2  or other analog read device
-//                devce=getDeviceById(cmd->devid);  
-//                pin1=getDevicePin(cmd->devid,1);
-//                v=analogRead(pin1);
-//                retval=v<checkparam;
-//                break;     
        case 171: //eval if temp>%p2   
                 devce=getDeviceById(cmd->devid);
                 dht=(DHT*)((void*)(devce->devpointer));
@@ -636,12 +633,6 @@ boolean evalfunc(DspCommand *cmd){
                 paramtocheck=t;
                 //retval=t>checkparam;                
           break;
-//       case 172: //eval if temp<%p2          
-//                devce=getDeviceById(cmd->devid);  
-//                dht=(DHT*)((void*)(devce->devpointer));
-//                t=round(dht->readTemperature());
-//                retval=t<checkparam;
-//          break;
        case 173: //eval if humidity>%p2      
                 devce=getDeviceById(cmd->devid);  
                 dht=(DHT*)((void*)(devce->devpointer));
@@ -651,12 +642,6 @@ boolean evalfunc(DspCommand *cmd){
                 paramtocheck=t;
                 //retval=t>checkparam;                                 
           break;
-//       case 174: //eval if humidity<%p2          
-//                devce=getDeviceById(cmd->devid);  
-//                dht=(DHT*)((void*)(devce->devpointer));
-//                t=round(dht->readHumidity());
-//                retval=t<checkparam;                
-//          break;
         case 177://eval if press>%p2
                 getPressure();
                 paramtocheck=Pres;
@@ -783,7 +768,23 @@ boolean programExecute(){
                dspgyro->goLeft(interpreter.getParam1(cmd));               
               break;           
        case 50:
-            //  Myrobo.Stop(true);              
+            //  Myrobo.Stop(true);  
+//===============DESP MOTOR ============================   
+       case 60: //Setup despmotor
+                setDevicePin(cmd->devid,1,cmd->param1);
+                setDevicePin(cmd->devid,2,cmd->param2);
+                devce=getDeviceById(cmd->devid);
+                Motor=new DESP_DCMotor;                
+                devce->devpointer=(int)(Motor);  
+                Motor->init(++motid,cmd->param1,cmd->param2);
+              break;      
+       case 61: //Command motor
+                n=interpreter.getParam1(cmd);//get motor command 1=forward 2=backward 4=stop
+                devce=getDeviceById(cmd->devid);  
+                Motor=(DESP_DCMotor*)((void*)(devce->devpointer));
+                Motor->run(n);
+              break; 
+                                       
        case 70:                      
               break;       
        case 80:                                              
@@ -792,6 +793,7 @@ boolean programExecute(){
        //99  is a special command no use   END         
        //100 is a special command no use   ELSE    
        //--------- Devices setup & commands
+//===============SPEAKER BUZZER ============================        
        case 110:       //setup speaker
                 setDevicePin(cmd->devid,1,cmd->param1);//Speakerpin
                 devce=getDeviceById(cmd->devid);  
@@ -810,6 +812,7 @@ boolean programExecute(){
                 d=interpreter.getParam2(cmd);//cmd->param2;
                 speak->PlayTone(n,d);
                 break;
+//===============LCD SCREEN ============================                
        case 120:setuplcd(); //just one lcd so no need to keep track of the sda/scl address
               break;
        case 121:s=cmd->paramstr;
@@ -839,7 +842,7 @@ boolean programExecute(){
                 LCDprint(s);LCDprint(String(interpreter.getParam1(cmd)));
                 Serial.print(s);Serial.println(interpreter.getParam1(cmd));
                 break;
-                
+//===============LASER============================                
        case 130: //Laser setup
                 pinMode(cmd->param1,OUTPUT);
                 setDevicePin(cmd->devid,1,cmd->param1);//no vars on setup
@@ -851,13 +854,15 @@ boolean programExecute(){
        case 132: //Laser Off
                 pin1=getDevicePin(cmd->devid,1);
                 digitalWrite(pin1, LOW); 
-                break;     
+                break;
+//===============IR SENSOR ============================                     
        case 135://IR Sensor Setup
                 pinMode(cmd->param1,INPUT);
                 setDevicePin(cmd->devid,1,cmd->param1);//no vars on setup commands
                 break;     
             //136 if IR distance==LOW on eval we have an obstacle
-            
+
+//===============ULTRASONIC Distance Sensor============================            
        case 140://UltraSonic Setup   
                 setDevicePin(cmd->devid,1,cmd->param1);//trig
                 setDevicePin(cmd->devid,2,cmd->param2);//echo 
@@ -871,6 +876,7 @@ boolean programExecute(){
                 break;
                 //141 eval function if
                 //142 eval function if   
+//===============SWITCH various devices ============================                
        case 145://Switch Setup
                 pinMode(cmd->param1,INPUT);
                 setDevicePin(cmd->devid,1,cmd->param1);//no vars on setup
@@ -879,7 +885,7 @@ boolean programExecute(){
                 setDevicePin(cmd->devid,4,0); //Time last check value
                 break;     
             //146 if Switch==HIGH on eval switch is on
-                
+//===============MICROSERVO 90 ============================                
        case 150: //Servo setup
                 devce=getDeviceById(cmd->devid);  
                 serv=new Servo();
@@ -921,7 +927,8 @@ boolean programExecute(){
                 d=min(d+n,180);
                 serv->write(d);
                 setDevicePin(cmd->devid,2,d);//set current position as param2 not used
-                break;         
+                break; 
+//===============PHOTOINTERRUPT ============================                        
        case 160://Photointerrupt Setup for distance measure make a class for this
                 //needs interrupt pin (2,3) for nano
                 //needs count number for 1 cm so we can check distance i.e. 10 changes makes 1 cm
@@ -930,7 +937,7 @@ boolean programExecute(){
                 break;
        //case 162://eval if distance traveled > %p2 in CM
        //case 163://eval if distance traveled < %p2 in CM
-
+//===============MOISTURE SENSOR ============================
        case 165://Setup Moisture sensor analog pin device just read this or other analog read device
                 pinMode(cmd->param1,INPUT);
                 setDevicePin(cmd->devid,1,cmd->param1);//no vars on setup
@@ -938,6 +945,7 @@ boolean programExecute(){
              //81 moisture fix variable or other analog read device
        //case 166 //eval if moisture > %p2 or other analog read device
        //case 167 //eval if moisture < %p2 or other analog read device
+//===============DHT TEMPERATURE ============================       
        case 170: //DHT temperature setup
                // DoDebug(F("Setup Temp"),cmd->param1);
                 devce=getDeviceById(cmd->devid);  
@@ -953,7 +961,8 @@ boolean programExecute(){
        //case 171 //eval if temp>%p2
        //case 172 //eval if temp<%p2       
        //case 173 //eval if humidity>%p2
-       //case 174 //eval if humidity<%p2       
+       //case 174 //eval if humidity<%p2   
+//===============BMP180 BAROMETRIC SENSOR ============================           
        case 176://BMP180 barometric Setup ONLY ONE SDA/SCL Device
                 devce=getDeviceById(cmd->devid);
                 bmp=new SFE_BMP180;
@@ -967,22 +976,28 @@ boolean programExecute(){
        //case 177// eval if Pres>%p2           
        //case 178// eval if relP>%p2           
        //case 179// eval if bmpTemp>%p2
+
+//===================SETUP PIN FOR OUTPUT===================================       
        case 200:          
                 n=interpreter.getParam1(cmd);            
                 pinMode(n, OUTPUT);
                 break;
+//===================SETUP PIN FOR INPUT===================================                       
        case 201:     
                 n=interpreter.getParam1(cmd);                
                 pinMode(n, INPUT);
                 break;
+//===================SET PIN TO HIGH===================================                       
        case 202:      
                 n=interpreter.getParam1(cmd);              
                 digitalWrite(n, HIGH);   
                 break;   
+//===================SET PIN TO LOW===================================                                       
        case 203:             
                 n=interpreter.getParam1(cmd);         
                 digitalWrite(n, LOW);
                 break;  
+//===================VARIABLES===================================                                       
        case 230://set variable to value
                 //param2 has the idx of the var
                 //param1 has the value
@@ -1009,7 +1024,7 @@ boolean programExecute(){
                 pin1=interpreter.getVar(d);
                 DoDebug(F("new Value="),pin1);                
                 break;
-                
+//===================DELAY MILLISECS===================================                                       
        case 250:
                 n=interpreter.getParam1(cmd);
                 delay(n);

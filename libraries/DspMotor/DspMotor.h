@@ -21,6 +21,7 @@
 class DESP_DCMotor
 {
  public:
+ 	int lastcmd;
   DESP_DCMotor();
   void init(int mymotorno,int mypin1,int mypin2);
   void run(int cmd);

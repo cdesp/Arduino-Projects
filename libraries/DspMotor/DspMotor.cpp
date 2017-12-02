@@ -24,7 +24,7 @@ void DESP_DCMotor::init(int mymotorno,int mypin1,int mypin2) {
 
 
 void DESP_DCMotor::run(int cmd) {
-  
+  lastcmd=cmd;
   switch (cmd) {
   case FORWARD:
         digitalWrite(cpin1, LOW); // set pin 2 on L293D low
