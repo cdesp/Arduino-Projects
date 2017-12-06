@@ -1,72 +1,13 @@
 #include <Arduino.h>
-#include <NewPing.h>
-#include <DspMotor.h>
-#include <DspStepper.h>
-#include <DspInterpreter.h>                          
-#include <helper_3dmath.h>
-#include "MPU6050_6Axis_MotionApps20.h"
-#include <DspGyro.h>
-#include <I2Cdev.h>
-#include <Wire.h>                                     
-#include "SoftwareSerial.h"                            
-//#include <LiquidCrystal.h>              
-#include <Speaker.h>
-#include <Servo.h>
 #include "CtrlPlatform.h"
-#include "CPSonicSensor.h"
-#include <LCD.h>
-#include <LiquidCrystal_I2C.h>
-#include "DHT.h"
-#include <SFE_BMP180.h>
-#include "CPRobot.h" //TODO: Should control 2 DCMotors and a Gyro for turning Right and left by certain degrees. Also a photointerrupter to count distance travelled.
-                    //Commands: Forward,backward,Stop, StepForward,StepBackward, Turn Left xx degrees, Turn Right xx degrees.
 
-
-//Define variables 
-
-
-// Defines for LCD Serial
-#define I2C_ADDR          0x27        //Define I2C Address where the PCF8574A is
-#define BACKLIGHT_PIN      3
-#define En_pin             2
-#define Rw_pin             1
-#define Rs_pin             0
-#define D4_pin             4
-#define D5_pin             5
-#define D6_pin             6
-#define D7_pin             7
-
-
-
-#define HALFSTEP 8
-LiquidCrystal_I2C *lcd=NULL;  //Serial LCD                   
-SoftwareSerial *BTSerial=NULL; //BlueTooth Serial comm
-NewPing *sonarf=NULL; //UltraSonic Sensor
-CP_SonicSensor *sonic=NULL; //UltraSonic Sensor
-DESP_Gyro *dspgyro=NULL; //Gyroscope 
-Servo *serv=NULL; //MicroServo SG90
-Speaker* speak=NULL; //Buzzer just a pin
-DHT*  dht=NULL; //temp sensor DHT
-SFE_BMP180* bmp=NULL; //Barometric Sensor SDA/SCL
-DESP_DCMotor* Motor=NULL;//DC Motor
-  
-double relP,Pres,bmpTemp;  //Pres=Absolute Pressure, relP= Pressure at sea level, bmpTemp=Temperature
-int motid=0;//Motor ID auto increases for each desp_dcmotor probably not needed
-
-
-
-DESP_Interpreter interpreter;
                                    
-enum TPlatfMode {
-  none,
-  progload
-};                                                                                        
+void speedencint()//attach change photointerrupt here (Wrapper function for my class)
+{
+  if (Robo)
+       Robo->handleInterrupt();   
+}
 
-TPlatfMode PlatfMode;
-TPlatfMode prevmode;
-
-char lastcmd=' ';
-char nextcmd=' ';
 
 void LCDprint(String s){
   if (lcd!=NULL) {
@@ -81,37 +22,31 @@ void LCDclear(){
 }
 
 void BTprint(String s){
-  if (BTSerial!=NULL) BTSerial->println(s);
-  else Serial.println();
+ // if (BTSerial!=NULL) BTSerial->println(s);
+   Serial.println();
 }
 
 int BTread(){
-  if (BTSerial!=NULL)  return BTSerial->read();
-  else return Serial.read();
+ // if (BTSerial!=NULL)  return BTSerial->read();
+  return Serial.read();
 }
 
 int BTavailable(){
-  if (BTSerial!=NULL) return BTSerial->available();
-   else return Serial.available();
+ // if (BTSerial!=NULL) return BTSerial->available();
+    return Serial.available();
 }
 
-int BToverflow(){
- if (BTSerial!=NULL) return BTSerial->overflow();
-   else return false;//Serial.overflow();
-}   
+//int BToverflow(){
+// if (BTSerial!=NULL) return BTSerial->overflow();
+//   else return false;//Serial.overflow();
+//}   
 
 void BTwrite(uint8_t b){
- if (BTSerial!=NULL) BTSerial->write(b);
- else Serial.write(b);
+// if (BTSerial!=NULL) BTSerial->write(b);
+Serial.write(b);
 }
 
                                                                    
-void speedencint()
-{
-   //if (Myrobo.RoboState()==rcForward)  Myrobo.mydist++;
-   //if (Myrobo.RoboState()==rcBackward)  Myrobo.mydist--;
-}
-
 void DoDebug(String s,int n){
  // if (lcd==NULL) {
    Serial.print(s);
@@ -148,8 +83,8 @@ void setuplcd(){
    //Switch on the backlight
    lcd->setBacklightPin(BACKLIGHT_PIN,POSITIVE);
    lcd->setBacklight(HIGH);  
-   LCDprint(F("LCD OK...."));
-   delay(2000); 
+ //  LCDprint(F("LCD OK...."));
+ //  delay(2000); 
   }
 }
 
@@ -157,7 +92,7 @@ void setupBT(int txpin,int rxpin){//12,13
   BTSerial= new SoftwareSerial(txpin, rxpin);
   BTSerial->begin(9600);
   BTSerial->flush();
-  BTSerial->println(F("Bluetooth On ..."));  
+//  BTSerial->println(F("Bluetooth On ..."));  
 }
 
 void setupGyro(){
@@ -173,67 +108,33 @@ void setup() {
   
   interpreter.evaluate=evalfunc;  
   interpreter.evalvar=evalvarfunc;
-                                                                        
- // setuplcd();
-  LCDclear();
-  LCDprint(F("CP READY ..."));
- 
-  Serial.println(F("Sensors OK...."));
-  delay(500);
+   //interpreter.setfuncif(isIFfunc);  //TODO:uncomment to see if its ok 
 
-                
- // pinMode (speedenc, INPUT) ;
- // attachInterrupt(speedint, speedencint, CHANGE);
- // lcd.clear();
- // LCDprint("Robo OK....");
-               
-
-  //MyServo.attach(A1);                                                                                                                            
-  
-//  DoTurn(511);
-//  delay(500);
-//  DoTurn(-1023);
- // delay(500);
- // DoTurn(511);   
-
-  Serial.println(F("Setup ok!"));    
-                         
+//  setupGyro(); //Gyroscope eats a lot of memory
 }
 
 
-              
-String mes1;
-String Err="";         
-String smode;
-unsigned long tm2=0;
-unsigned long tm3=0;
-
 //get remote programming
                            
-boolean inprogram=true;
-
-
 
 int converttoint(byte b1,byte b2){
   return b2*256+b1;   
 }
 
-int ChkByte=0;
-
 int getNumberFromBT(){
  byte b1,b2;
 
  while (!BTavailable()){ 
-  if (BToverflow()) {
-   Serial.println(F("SoftwareSerial overflow!")); 
-  }
+ // if (BToverflow()) {
+ //  Serial.println(F("SoftwareSerial overflow!")); 
+  //}
  }
  
  b1=BTread();           
  while (!BTavailable()) {
-  if (BToverflow()) {
-   Serial.println(F("SoftwareSerial overflow!")); 
-  }
+ // if (BToverflow()) {
+//   Serial.println(F("SoftwareSerial overflow!")); 
+//  }
  }
  b2=BTread();         
  if (b1==253)
@@ -255,9 +156,9 @@ char getCharFromBT(){
  byte b1;
 
  while (!BTavailable()){ 
-  if (BToverflow()) {
-   Serial.println(F("SoftwareSerial overflow!")); 
-  }
+ // if (BToverflow()) {
+ //  Serial.println(F("SoftwareSerial overflow!")); 
+ // }
  }
  
  b1=BTread();           
@@ -270,6 +171,7 @@ char getCharFromBT(){
 boolean isDeviceSetupCmd(int cmdid)
 {
   switch (cmdid) {
+    case 50: //Robo
     case 60:   //DCmotor
     case 110:  //Sound
     case 120:  //LCD
@@ -289,8 +191,8 @@ boolean isDeviceSetupCmd(int cmdid)
 
 void addDevice(int devid)
 { 
- DoDebug(F("Adding Device id="),devid); 
- DoDebug(F("Position="),actdevcount); 
+// DoDebug(F("Adding Device id="),devid); 
+// DoDebug(F("Position="),actdevcount); 
  actdevices[actdevcount++].actdevid=devid;  
 }
 
@@ -303,9 +205,9 @@ actdevice* getDeviceById(int devid)
        return actdevices+i;
     }
 
-  DoDebug(F(" NULL DEVICE NOT FOUND:"),devid);
-  for (int i=0;i<actdevcount;i++)
-    DoDebug(F("Device:"),actdevices[i].actdevid);     
+//  DoDebug(F(" NULL DEVICE NOT FOUND:"),devid);
+//  for (int i=0;i<actdevcount;i++)
+ //   DoDebug(F("Device:"),actdevices[i].actdevid);     
   return NULL;  
 }
 
@@ -314,16 +216,16 @@ void setDevicePin(int devid,int paramno,int paramvalue)
 {
  if (devid>=0)  
    getDeviceById(devid)->param[paramno-1]= paramvalue;
- else
-    DoDebug(F("SET Invalid Device "),devid);
+// else
+//   DoDebug(F("SET Invalid Device "),devid);
 }
 
 int getDevicePin(int devid,int paramno)
 {
  if (devid>=0)    
    return getDeviceById(devid)->param[paramno-1];
- else
-   DoDebug(F("GET Invalid Device "),devid);
+// else
+ //  DoDebug(F("GET Invalid Device "),devid);
 }
 
 
@@ -342,7 +244,7 @@ boolean getProgramFromBT()
 
   actdevcount=0;//reset device table
  // err="";
-  DoDebug(F("Get new program"),0);
+ // DoDebug(F("Get new program"),0);
   //BTwrite("In Programming..          ");  
   t= millis();
   do{
@@ -352,17 +254,17 @@ boolean getProgramFromBT()
   while ((BTavailable()==0) and (millis()-t<5000));
   
   siz=BTread();
-  DoDebug("Prog size:",siz);
+ // DoDebug("Prog size:",siz);
   
   if (siz<1) {
-     Serial.println(F("Invalid Size. abort"));
+    // Serial.println(F("Invalid Size. abort"));
     PlatfMode=none;                   
     return false;
   }
 
-  if (BTSerial==NULL) Serial.println(F("Read Program"));
+ // if (BTSerial==NULL) Serial.println(F("Read Program"));
   delay(400);
-  interpreter.newProgram();  
+  interpreter.newProgram();
   ChkByte=0;
   do
   {
@@ -441,15 +343,15 @@ boolean getProgramFromBT()
 //  Serial.print(testchkbyte);Serial.print(" ");Serial.print(ChkByte);
   
   if (testchkbyte==ChkByte){  
-    Serial.println(F("Program Read ok"));
-    Serial.println(err);
-    BTprint(F("Program Transfer ok"));
+   // Serial.println(F("Program Read ok"));
+   // Serial.println(err);
+  //  BTprint(F("Program Transfer ok"));
   }
   else   {
-    Serial.println(F("CRC Error!!! "));
-    Serial.println(testchkbyte,DEC);Serial.println(" ");
-    Serial.println(ChkByte,DEC);Serial.println(" ");
-    Serial.println(err);
+   // Serial.println(F("CRC Error!!! "));
+  //  Serial.println(testchkbyte,DEC);Serial.println(" ");
+  //  Serial.println(ChkByte,DEC);Serial.println(" ");
+   // Serial.println(err);
     //BTwrite("CHECKSUM ERROR");
     delay(2000);
     return false;
@@ -468,9 +370,9 @@ int evalvarfunc(DspCommand *cmd,int varidx){
   int devid;
    actdevice* devce; 
   
-  DoDebug(F("FIX VAR:"),varidx);
-  DoDebug(F("CMDID:"),cmd->cmdid);
-  DoDebug(F("DEVID:"),cmd->devid);
+//  DoDebug(F("FIX VAR:"),varidx);
+//  DoDebug(F("CMDID:"),cmd->cmdid);
+//  DoDebug(F("DEVID:"),cmd->devid);
 
 //varidx for FIX VARS is 75..90 because of signed byte -127..128
   switch(varidx){//we need the device ID also ????
@@ -511,7 +413,31 @@ int evalvarfunc(DspCommand *cmd,int varidx){
       
   }
 }
-                                  
+
+
+boolean isIFfunc(int cmdid){                          
+  switch(cmdid){
+     
+   case 94:  //check digitalpin is high
+   case 95:   //check digitalpin is low
+   case 136: //IR distance sensor 
+   case 141: //Usonic Device if distance greater,etc
+   case 146: //Switch device
+   case 166: //Moisture
+   case 171: //Temp GT,etc  
+   case 173: //Humid GT,etc
+   case 177: //pressure
+   case 178: //relative pressure
+   case 179: //temp from bmp180   
+           return true;
+   
+   default:
+           return false;    
+  }
+
+}
+
+
 boolean evalfunc(DspCommand *cmd){
   
   boolean retval=true;  
@@ -522,7 +448,7 @@ boolean evalfunc(DspCommand *cmd){
   int v,p,d,t;
   actdevice* devce; 
   
-  DoDebug(F("testing:"),cmd->cmdid);
+ // DoDebug(F("testing:"),cmd->cmdid);
   checkparam=interpreter.getParam2(cmd);
   opnd=interpreter.getParam1(cmd);
   switch(cmd->cmdid){
@@ -531,69 +457,28 @@ boolean evalfunc(DspCommand *cmd){
             // DoDebug("LOOP COMMAND",0);
              return true;
              break;
-     case 80:                      
-          break;     
-     case 81:                   
-          break;     
-     case 82:                                      
-          break;     
-     case 83:                         
-          break;     
-     case 84:                           
-          break;     
-     case 85:                        
-          break;     
-     case 86:  
-          break;     
-     case 87:  
-          break;     
-     case 88:                    
-          break;     
-     case 89:                     
-          break;     
-     case 90:                        
-          break;     
-     case 91:                         
-          break;     
-     case 92:                      
-          break;     
-     case 93:              
-          break;     
      case 94:      
           paramtocheck=digitalRead(checkparam);
           checkparam=HIGH;
           opnd=4; //equal
-          //retval=digitalRead(checkparam)==HIGH;
           break;     
      case 95:                     
           paramtocheck=digitalRead(checkparam);
           checkparam=LOW;
           opnd=4; //equal     
-          //retval=digitalRead(checkparam)==LOW;
           break;     
-     case 96:  
-          break;     
-     case 97:  
-          break;     
-     case 98:  
-          break;                 
      case 136: // //136 if IR distance>%p1
-            
                devce=getDeviceById(cmd->devid);  
                pin1=getDevicePin(cmd->devid,1);
                paramtocheck=digitalRead(pin1);
                checkparam=LOW;
-               opnd=4; //equal  
-               //retval=digitalRead(pin1)==LOW;               
+               opnd=4; //equal             
           break;          
      case 141: //distance>
                devce=getDeviceById(cmd->devid);  
                sonic=(CP_SonicSensor*)((void*)(devce->devpointer));
                sonic->checkStatus();
-             //  DoDebug(F("Distance"),sonic->distanceFront());
-               paramtocheck=sonic->distanceFront();
-               
-               //retval=sonic->distanceFront() >checkparam;          
+               paramtocheck=sonic->distanceFront();       
           break;
      case 146:  //check switch if pressed no params
                 devce=getDeviceById(cmd->devid);  
@@ -614,15 +499,12 @@ boolean evalfunc(DspCommand *cmd){
                 paramtocheck=d;
                 opnd=4;//equal
                 checkparam=HIGH; 
-                //retval=d;
-                //setDevicePin(cmd->devid,3,v);
           break;
        case 166://eval if moisture > %p2 or other analog read device
                 devce=getDeviceById(cmd->devid);  
                 pin1=getDevicePin(cmd->devid,1);
                 v=analogRead(pin1);
                 paramtocheck=v;
-                //retval=v>checkparam;
                 break;     
        case 171: //eval if temp>%p2   
                 devce=getDeviceById(cmd->devid);
@@ -630,8 +512,7 @@ boolean evalfunc(DspCommand *cmd){
                 t=round(dht->readTemperature());
              //   DoDebug(F("temp="),t);
              //   DoDebug(F("Param="),checkparam);
-                paramtocheck=t;
-                //retval=t>checkparam;                
+                paramtocheck=t;            
           break;
        case 173: //eval if humidity>%p2      
                 devce=getDeviceById(cmd->devid);  
@@ -639,29 +520,25 @@ boolean evalfunc(DspCommand *cmd){
                 t=round(dht->readHumidity());
              //   DoDebug(F("humid="),t);
              //   DoDebug(F("Param="),checkparam);
-                paramtocheck=t;
-                //retval=t>checkparam;                                 
+                paramtocheck=t;                               
           break;
         case 177://eval if press>%p2
                 getPressure();
                 paramtocheck=Pres;
-                //retval=Pres<checkparam;
                 break;
         case 178://eval if relp>%p2
                 getPressure();
                 paramtocheck=relP;
-                //retval=relP<checkparam;
                 break;
         case 179://eval if bmptemp>%p2
                 getPressure();
                 paramtocheck=bmpTemp;
-                //retval=bmpTemp<checkparam;
                 break;
           
   }
-  DoDebug(F("PToCheck="),paramtocheck);
-  DoDebug(F("Param="),checkparam);
-  DoDebug(F("Check Opnd="),opnd);
+ // DoDebug(F("PToCheck="),paramtocheck);
+ // DoDebug(F("Param="),checkparam);
+ // DoDebug(F("Check Opnd="),opnd);
   switch (opnd){
     case 0://IS
            retval=  paramtocheck==checkparam;
@@ -686,15 +563,10 @@ boolean evalfunc(DspCommand *cmd){
            break;
   }
 
-  DoDebug(F("Return="),retval);
+ // DoDebug(F("Return="),retval);
   return retval;
   
 }
-
-int lastcmdid=-1;
-float straightbearing=-1;
-boolean lastcommandexecuted=true;
-DspCommand *cmd;
 
 boolean programExecute(){
 
@@ -718,6 +590,9 @@ boolean programExecute(){
        // DoDebug("Command:",cmd->cmdid); 
         com=cmd->cmdid;
         lastcommandexecuted=false;
+        if (com!=lastcmdid)
+         setupcmds=0;//new setup command
+        else setupcmds++; 
      }  else  com=2;               
   }  
   else
@@ -727,48 +602,28 @@ boolean programExecute(){
      switch(com) {
        case 1:break;
        case 2:interpreter.endProgram();       
-              DoDebug(F("PROGRAM TERMINATED!!!"),0);
-              DoDebug(F("===================="),0);
+           //   DoDebug(F("PROGRAM TERMINATED!!!"),0);
+            //  DoDebug(F("===================="),0);
               break;
-       case 5:                         
-               //n=cmd->param1;
-               n=interpreter.getParam1(cmd);
-               if (n<5) n=5;
-               if (n>100) n=100;
-              // Myrobo.stepMoveinCm=n;
-               break;
-       case 10:                  
-               gp=dspgyro->curbearing;
-               DoDebug(F("Bearing:"),gp);
-               if (com!=lastcmdid){
-                 straightbearing=gp;
-                 DoDebug(F("StraightBearing:"),gp);
-               }
-
-                bd=dspgyro->getBearingDistance(straightbearing,gp);
-                DoDebug(F("distance:"),bd);
-                //if (abs(bd)<5)
-                  // Myrobo.stepForward();                
-                //else
-                {                                  
-                 
-                  dspgyro->gotoBearing(straightbearing);
-                  DoDebug(F("Straight:"),straightbearing);
-                  lastcmdid=com;
-                  return false;                       
+//===============DESP Robot ============================ 
+       case 50:   //Setup desp Robot
+                if (setupcmds==0) {
+                  setDevicePin(cmd->devid,1,cmd->param1);
+                  setDevicePin(cmd->devid,2,cmd->param2);
+                } else if (setupcmds==1) { 
+                  setDevicePin(cmd->devid,3,cmd->param1);
+                  setDevicePin(cmd->devid,4,cmd->param2);
+                } else {       //3rd time we init the device                           
+                  devce=getDeviceById(cmd->devid);
+                  Robo=new CP_Robot;                
+                  devce->devpointer=(int)(Robo);  
+                  Robo->init(getDevicePin(cmd->devid,1),getDevicePin(cmd->devid,2),getDevicePin(cmd->devid,3),getDevicePin(cmd->devid,4),cmd->param1);
+                  if (cmd->param1!=0){
+                    pinMode (cmd->param1, INPUT) ;
+                    attachInterrupt(digitalPinToInterrupt(cmd->param1), speedencint, CHANGE);
+                  }
                 }
-              break;   
-       case 20:
-             //  Myrobo.stepBackward();
-              break;
-       case 30:
-               dspgyro->goRight(interpreter.getParam1(cmd));
-              break;
-       case 40:
-               dspgyro->goLeft(interpreter.getParam1(cmd));               
-              break;           
-       case 50:
-            //  Myrobo.Stop(true);  
+              break;       
 //===============DESP MOTOR ============================   
        case 60: //Setup despmotor
                 setDevicePin(cmd->devid,1,cmd->param1);
@@ -783,13 +638,9 @@ boolean programExecute(){
                 devce=getDeviceById(cmd->devid);  
                 Motor=(DESP_DCMotor*)((void*)(devce->devpointer));
                 Motor->run(n);
-              break; 
-                                       
-       case 70:                      
-              break;       
-       case 80:                                              
-              
-              break;
+              break;  
+       //70,72 - special loop commands
+       //75- 90 special fixed variables from devices
        //99  is a special command no use   END         
        //100 is a special command no use   ELSE    
        //--------- Devices setup & commands
@@ -817,7 +668,7 @@ boolean programExecute(){
               break;
        case 121:s=cmd->paramstr;
                 LCDprint(s);
-                Serial.println(s);
+                //Serial.println(s);
                 break;
        case 122:
                 LCDclear();
@@ -827,20 +678,20 @@ boolean programExecute(){
                 {
                   d=interpreter.getParam1(cmd);
                   n=interpreter.getParam2(cmd);
-                  DoDebug(F("LCD SET P1="),d);
-                  DoDebug(F("LCD SET P2="),n);
+                //  DoDebug(F("LCD SET P1="),d);
+                //  DoDebug(F("LCD SET P2="),n);
                   lcd->setCursor(d,n);
                 }  
                 break;
        case 124://LCD print number
                 s=String(interpreter.getParam1(cmd)); 
                 LCDprint(s);
-                Serial.println(s);
+                //Serial.println(s);
                 break;
        case 125://LCD print STRING AND number
                 s=cmd->paramstr;
                 LCDprint(s);LCDprint(String(interpreter.getParam1(cmd)));
-                Serial.print(s);Serial.println(interpreter.getParam1(cmd));
+               // Serial.print(s);Serial.println(interpreter.getParam1(cmd));
                 break;
 //===============LASER============================                
        case 130: //Laser setup
@@ -860,7 +711,7 @@ boolean programExecute(){
                 pinMode(cmd->param1,INPUT);
                 setDevicePin(cmd->devid,1,cmd->param1);//no vars on setup commands
                 break;     
-            //136 if IR distance==LOW on eval we have an obstacle
+           // //136 if IR distance==LOW on eval we have an obstacle
 
 //===============ULTRASONIC Distance Sensor============================            
        case 140://UltraSonic Setup   
@@ -956,7 +807,7 @@ boolean programExecute(){
                 setDevicePin(cmd->devid,1,cmd->param1);//Pin  no vars on setup
                 setDevicePin(cmd->devid,2,cmd->param2);//Device Type
                 dht->begin();
-                DoDebug(F("DHT Setup ok"),0);
+            //    DoDebug(F("DHT Setup ok"),0);
                break;
        //case 171 //eval if temp>%p2
        //case 172 //eval if temp<%p2       
@@ -967,10 +818,11 @@ boolean programExecute(){
                 devce=getDeviceById(cmd->devid);
                 bmp=new SFE_BMP180;
                 devce->devpointer=(int)(bmp);
-                if (bmp->begin())
-                   Serial.println(F("BMP180 init success"));
-                else
-                    Serial.println(F("BMP180 init fail\n\n"));    
+                bmp->begin();
+//                if (bmp->begin())
+//                   Serial.println(F("BMP180 init success"));
+//                else
+//                    Serial.println(F("BMP180 init fail\n\n"));    
                 break;  
                 //78,79,80 are the device variables
        //case 177// eval if Pres>%p2           
@@ -1003,26 +855,26 @@ boolean programExecute(){
                 //param1 has the value
                 n=interpreter.getParam1(cmd);         
                 d=interpreter.getParam2(cmd);         
-                DoDebug(F("Set param idx="),d);                
-                DoDebug(F("Value="),n);
+            //    DoDebug(F("Set param idx="),d);                
+            //    DoDebug(F("Value="),n);
                 pin1=interpreter.getVar(d);
-                DoDebug(F("Old Value="),pin1);
+            //    DoDebug(F("Old Value="),pin1);
                 interpreter.setVar(d,n);
                 pin1=interpreter.getVar(d);
-                DoDebug(F("new Value="),pin1);                
+            //    DoDebug(F("new Value="),pin1);                
                 break;
        case 231://change variable by value
                 //param2 has the idx of the var
                 //param1 has the value
                 n=interpreter.getParam1(cmd);         
                 d=interpreter.getParam2(cmd);         
-                DoDebug(F("Set param idx="),d);                
-                DoDebug(F("Value="),n);
+            //    DoDebug(F("Set param idx="),d);                
+            //    DoDebug(F("Value="),n);
                 pin1=interpreter.getVar(d);
-                DoDebug(F("Old Value="),pin1);
+            //    DoDebug(F("Old Value="),pin1);
                 interpreter.setVar(d,pin1+n);//change the old value by n
                 pin1=interpreter.getVar(d);
-                DoDebug(F("new Value="),pin1);                
+            //    DoDebug(F("new Value="),pin1);                
                 break;
 //===================DELAY MILLISECS===================================                                       
        case 250:
@@ -1033,8 +885,8 @@ boolean programExecute(){
       
   interpreter.commandExecuted();
  // DoDebug(F(" // Command Executed // "),0);
-  if (com==10 || com==20 || com==30 || com==40)                     
-    lastcmdid=com;
+ // if (com==10 || com==20 || com==30 || com==40)                     
+  lastcmdid=com;
   lastcommandexecuted=true;
   
   return !(com==10 || com==20 || com==30 || com==40);                    
@@ -1046,7 +898,7 @@ void DoProgram()
   unsigned long tm;
   
   if (inprogram==true){
-    straightbearing=-1;
+   // straightbearing=-1;
     lastcmdid=-1;
     lastcommandexecuted=true;    
     if (getProgramFromBT()){     
@@ -1069,44 +921,6 @@ void DoProgram()
         
   }     
 }
-
-
-int lastprintbearing;
-float beardist=0;
-float lastbeardist=0;
-
-
-float getGyroDeviation(){
-    
-  
-  dspgyro->getSafeGyroPos();   
-   
-  if (dspgyro->turning ){
-                          
-
-                              
-   if (dspgyro->isTargetReached(maxdeviation)){                                   
-   // Myrobo.Stop(true);        
-    dspgyro->getSafeGyroPos();     
-    if (dspgyro->isTargetReached(maxdeviation)){                                   
-      dspgyro->targetReached(); 
-      DoDebug(F("Target reached!!!"),0);
-      DoDebug(F("current:"),dspgyro->curbearing); 
-      DoDebug(F("target:"),dspgyro->targbearing);
-      DoDebug(F("Deviation:"),dspgyro->getDistance());      
-      dspgyro->getGyroSettings(true);
-      return 0;
-    }
-    else
-     return dspgyro->getDistance();
-   }
-   else  
-     return dspgyro->getDistance();   
-  }
-  else
-   return 0;
-}
-
 
 #define ALTITUDE 280.0 
 void getPressure(){
@@ -1193,22 +1007,16 @@ void getPressure(){
          // Serial.print(a*3.28084,0);
          // Serial.println(" feet");}
         }
-        else Serial.println(F("error retrieving pressure\n"));
+       // else Serial.println(F("error retrieving pressure\n"));
       }
-      else Serial.println(F("error starting pressure\n"));
+     // else Serial.println(F("error starting pressure\n"));
     }
-    else Serial.println(F("error retrieving temperature\n"));
+   // else Serial.println(F("error retrieving temperature\n"));
   }
-  else Serial.println(F("error starting temperature\n"));
+ // else Serial.println(F("error starting temperature\n"));
 
   
 }
-
-
-unsigned long looptm=0;
-unsigned long functm=0;
-unsigned long tm5=0;
-unsigned long tm4=0;
 
 
 void loop()
@@ -1222,7 +1030,7 @@ void loop()
        case progload:  
           LCDprint(F("PROGRAMMING"));
          // delay(2000);
-          smode="Prog";                    
+        //  smode="Prog";                    
           break;
   }
   }
@@ -1246,19 +1054,10 @@ void loop()
       delay(500);
       break;
     case '0'://stop command
-            DoDebug(F("STOPPED!!!"),0);
+           // DoDebug(F("STOPPED!!!"),0);
             inprogram=false;
             PlatfMode=none;
-            break;  
-     case 'g':
-         dspgyro->getGyroSettings(true);
-         break;
-     case 'u':   
-         dspgyro->goLeft(90);
-         break;
-     case 'i':
-         dspgyro->goRight(90);
-         break;        
+            break;     
     }
   }
 

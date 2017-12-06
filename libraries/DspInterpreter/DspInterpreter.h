@@ -3,8 +3,9 @@
 #ifndef dspinterpreter_h
 #define dspinterpreter_h
 
-#define stacksize 20
+#define STACKSIZE 10
 #define NOVAR -1
+#define MAXARDUVARS 10 //maximum arduino vars (User variables)
 
 #include <arduino.h>
 
@@ -32,11 +33,12 @@ typedef struct  DspCommand{
 
 typedef boolean (*function) (DspCommand*) ;
 typedef int (*funcevalvar) (DspCommand*,int) ;
+typedef boolean (*isfuncif) (int);
 
 
 class DESP_Stack
 {
-  DESP_Commands * myStack[stacksize];
+  DESP_Commands * myStack[STACKSIZE];
   int cur;
   
   public:
@@ -51,6 +53,7 @@ class DESP_Commands //linked list
  protected:
 
  public:
+ 	  isfuncif isFunctionIF;
     struct DspCommand *loopcommand;
     int loopcounter;
     struct DspCommand *cmd;//pointer to a command    
@@ -78,13 +81,15 @@ class DESP_Interpreter
  private:
      DESP_Commands* program;//our program    
      DESP_Stack  stack;          
-     int arduVars[20];//max 20 integer vars
+     int arduVars[MAXARDUVARS];//max 10 integer vars
   public:
      boolean running; //if we are running a program
      function evaluate;
-     funcevalvar evalvar;
+     funcevalvar evalvar; 
+     isfuncif isFunctionIF;    
      DESP_Interpreter();
      void init();
+     void setfuncif(isfuncif myfunc);
      void newProgram();
      void deleteProgram();      
      void startProgram();

@@ -1,54 +1,40 @@
 #ifndef ctrlpl_h
 #define ctrlpl_h
 
-
-//robot_logic
-int RECV_PIN = A5; //define input pin on Arduino for IR Receiver  was 3
-
-//IR obstacle Sensor NOT USED any more
-#define obstacleL 0 
-#define obstacleR 0 
-
-//BlackLine Sensor
-#define BlackLine1 23  
-#define BlackLine2 25  
-#define BlackLine3 27  
-#define BlackLine4 29  
-#define BlackLine5 31 
-#define frontSensor 33  
-
-//for 28byj NOT USED
-#define sensmotor1 22
-#define sensmotor2 24
-#define sensmotor3 26
-#define sensmotor4 28
-
-//motor pins
-#define mot1p1 48
-#define mot1p2 46
-#define mot2p1 50
-#define mot2p2 52
-
-#define mot3p1 49
-#define mot3p2 47
-#define mot4p1 51
-#define mot4p2 53
-
-#define motEN 30
-
-//speed encoder pin and interrupt no
-#define speedenc 19
-#define speedint 4
-
-//Sonic Sensor
-int trPin=5;//4;
-int ecPin=4;//5;
-
-//gyro
-int maxdeviation=4;//when turning how close to target we consider ok (degrees)
- 
+#include <NewPing.h>
+#include <DspMotor.h>
+#include <DspInterpreter.h>                          
+#include <helper_3dmath.h>
+#include "MPU6050_6Axis_MotionApps20.h"
+#include <DspGyro.h>
+#include <I2Cdev.h>
+#include <Wire.h>                                     
+#include "SoftwareSerial.h"                                
+#include <Speaker.h>
+#include <Servo.h>
+#include "CPSonicSensor.h"
+#include <LiquidCrystal_I2C.h>
+#include "DHT.h"
+#include <SFE_BMP180.h>
+#include "CPRobot.h" //TODO: Should control 2 DCMotors and a Gyro for turning Right and left by certain degrees. Also a photointerrupter to count distance travelled.
+                    //Commands: Forward,backward,Stop, StepForward,StepBackward, Turn Left xx degrees, Turn Right xx degrees.
 
 
+
+
+// Defines for LCD Serial
+#define I2C_ADDR          0x27        //Define I2C Address where the PCF8574A is
+#define BACKLIGHT_PIN      3
+#define En_pin             2
+#define Rw_pin             1
+#define Rs_pin             0
+#define D4_pin             4
+#define D5_pin             5
+#define D6_pin             6
+#define D7_pin             7
+
+
+//devices support
 typedef struct actdevice
 {
   int8_t actdevid; //signed byte
@@ -60,6 +46,48 @@ actdevice actdevices[10];
 int actdevcount=0;
 
 
+//Supported Devices
+LiquidCrystal_I2C *lcd=NULL;  //Serial LCD                   
+SoftwareSerial *BTSerial=NULL; //BlueTooth Serial comm
+NewPing *sonarf=NULL; //UltraSonic Sensor
+CP_SonicSensor *sonic=NULL; //UltraSonic Sensor
+DESP_Gyro *dspgyro=NULL; //Gyroscope 
+Servo *serv=NULL; //MicroServo SG90
+Speaker* speak=NULL; //Buzzer just a pin
+DHT*  dht=NULL; //temp sensor DHT
+SFE_BMP180* bmp=NULL; //Barometric Sensor SDA/SCL
+double relP,Pres,bmpTemp;  //Pres=Absolute Pressure, relP= Pressure at sea level, bmpTemp=Temperature
+DESP_DCMotor* Motor=NULL;//DC Motor
+int motid=0;//Motor ID auto increases for each desp_dcmotor probably not needed
+CP_Robot* Robo=NULL;//Cp Robot (Contains 2 motors,1 gyroscope and a photointerrupter)
+
+// 
+DESP_Interpreter interpreter;
+
+enum TPlatfMode {
+  none,
+  progload
+};                                                                                        
+
+TPlatfMode PlatfMode;
+TPlatfMode prevmode;
+
+int lastcmdid=-1;
+boolean lastcommandexecuted=true;
+DspCommand *cmd;
+int setupcmds;
+
+int ChkByte=0;//for crc checking of input bytes
+
+boolean inprogram=true;
+
+//String mes1;
+//String Err="";         
+String smode;
+
+
+char lastcmd=' ';
+char nextcmd=' ';
 
 #endif
 

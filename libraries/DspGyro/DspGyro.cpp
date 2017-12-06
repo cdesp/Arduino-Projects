@@ -14,7 +14,6 @@ DESP_Gyro::DESP_Gyro(int addr) {
   dmpReady=false;
   targbearing=0;
   yprpre[0]=100;
- // teapotPacket={ '$', 0x02, 0,0, 0,0, 0,0, 0,0, 0x00, 0x00, '\r', '\n' };
 }
 
 
@@ -48,8 +47,8 @@ void DESP_Gyro::checkGyro(boolean debug){
     if ((mpuIntStatus & 0x10) || fifoCount >= 1024) {
         // reset so we can continue cleanly
         mpu->resetFIFO();
-        if (debug)
-          Serial.println(F("FIFO overflow!"));       
+       // if (debug)
+        //  Serial.println(F("FIFO overflow!"));       
     } 
    }//while end
   // Serial.println("g3");
@@ -58,7 +57,11 @@ void DESP_Gyro::checkGyro(boolean debug){
     if (mpuIntStatus & 0x02) {
         // wait for correct available data length, should be a VERY short wait
         int safecnt=0;
-        while (fifoCount < packetSize) {fifoCount = mpu->getFIFOCount();if (++safecnt>20) {Serial.println("safecnt over 20");break;} else delay(5);}
+        while (fifoCount < packetSize) {fifoCount = mpu->getFIFOCount();
+        if (++safecnt>20) {
+        	 //Serial.println("safecnt over 20");
+        	 break;
+        } else delay(5);}
 			//	Serial.println("g3T1");
 			//	Serial.println(fifoCount,DEC);
         // read a packet from FIFO
@@ -69,35 +72,6 @@ void DESP_Gyro::checkGyro(boolean debug){
         // (this lets us immediately read more without waiting for an interrupt)
         fifoCount -= packetSize;
 
-        #ifdef OUTPUT_READABLE_QUATERNION
-            // display quaternion values in easy matrix form: w x y z
-            mpu->dmpGetQuaternion(&q, fifoBuffer);
-              if (debug){
-            Serial.print("quat\t");
-            Serial.print(q.w);
-            Serial.print("\t");
-            Serial.print(q.x);
-            Serial.print("\t");
-            Serial.print(q.y);
-            Serial.print("\t");
-            Serial.println(q.z);
-              }
-        #endif
-
-        #ifdef OUTPUT_READABLE_EULER
-            // display Euler angles in degrees
-            mpu->dmpGetQuaternion(&q, fifoBuffer);
-            mpu->dmpGetEuler(euler, &q);
-            Serial.print("euler\t");
-            Serial.print(euler[0] * 180/M_PI);
-            Serial.print("\t");
-            Serial.print(euler[1] * 180/M_PI);
-            Serial.print("\t");
-            Serial.println(euler[2] * 180/M_PI);
-        #endif
-
-        #ifdef OUTPUT_READABLE_YAWPITCHROLL
-            // display Euler angles in degrees
             
             mpu->dmpGetQuaternion(&q, fifoBuffer);
 
@@ -106,62 +80,17 @@ void DESP_Gyro::checkGyro(boolean debug){
             mpu->dmpGetYawPitchRoll(ypr, &q, &gravity);
 
             
-           if (debug && ypr[0]!=180 && ypr[0]!=0){
+         /*  if (debug && ypr[0]!=180 && ypr[0]!=0){
             Serial.print("ypr\t");
             Serial.print(ypr[0] * 180/M_PI);
             Serial.print("\t");
             Serial.print(ypr[1] * 180/M_PI);
             Serial.print("\t");
             Serial.println(ypr[2] * 180/M_PI);
-              }
+              }*/
             ypr[0]*= 180/M_PI;
             ypr[1]*= 180/M_PI;
             ypr[2]*= 180/M_PI;            
-        #endif
-
-        #ifdef OUTPUT_READABLE_REALACCEL
-            // display real acceleration, adjusted to remove gravity
-            mpu->dmpGetQuaternion(&q, fifoBuffer);
-            mpu->dmpGetAccel(&aa, fifoBuffer);
-            mpu->dmpGetGravity(&gravity, &q);
-            mpu->dmpGetLinearAccel(&aaReal, &aa, &gravity);
-            Serial.print("areal\t");
-            Serial.print(aaReal.x);
-            Serial.print("\t");
-            Serial.print(aaReal.y);
-            Serial.print("\t");
-            Serial.println(aaReal.z);
-        #endif
-
-        #ifdef OUTPUT_READABLE_WORLDACCEL
-            // display initial world-frame acceleration, adjusted to remove gravity
-            // and rotated based on known orientation from quaternion
-            mpu->dmpGetQuaternion(&q, fifoBuffer);
-            mpu->dmpGetAccel(&aa, fifoBuffer);
-            mpu->dmpGetGravity(&gravity, &q);
-            mpu->dmpGetLinearAccel(&aaReal, &aa, &gravity);
-            mpu->dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &q);
-            Serial.print("aworld\t");
-            Serial.print(aaWorld.x);
-            Serial.print("\t");
-            Serial.print(aaWorld.y);
-            Serial.print("\t");
-            Serial.println(aaWorld.z);
-        #endif
-    
-        #ifdef OUTPUT_TEAPOT
-            // display quaternion values in InvenSense Teapot demo format:
-            teapotPacket[2] = fifoBuffer[0];
-            teapotPacket[3] = fifoBuffer[1];
-            teapotPacket[4] = fifoBuffer[4];
-            teapotPacket[5] = fifoBuffer[5];
-            teapotPacket[6] = fifoBuffer[8];
-            teapotPacket[7] = fifoBuffer[9];
-            teapotPacket[8] = fifoBuffer[12];
-            teapotPacket[9] = fifoBuffer[13];
-            Serial.write(teapotPacket, 14);
-            teapotPacket[11]++; // packetCount, loops at 0xFF on purpose
-        #endif
 
     }
   //  Serial.println("g4");
@@ -181,9 +110,9 @@ void DESP_Gyro::calibrateGyro(boolean debug){
     delay(200);
     getSafeGyroPos();              
   }
-  Serial.println(yprpre[0],DEC);
-  Serial.println(ypr[0],DEC);
-  Serial.println("Calibration Finished!!!");  
+ // Serial.println(yprpre[0],DEC);
+ // Serial.println(ypr[0],DEC);
+//  Serial.println("Calibration Finished!!!");  
 }
  
  
@@ -198,19 +127,19 @@ void DESP_Gyro::init(){
 
 
     // initialize device
-    Serial.println(F("Initializing I2C devices..."));
+ //   Serial.println(F("Initializing I2C devices..."));
     mpu->initialize();
 
     // verify connection
-    Serial.println(F("Testing device connections..."));
+  //  Serial.println(F("Testing device connections..."));
     Serial.println(mpu->testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
 
     // wait for ready
-    Serial.println(F("\nSend any character to begin DMP programming and demo: "));
-    while (Serial.available() && Serial.read()); // empty buffer
+  //  Serial.println(F("\nSend any character to begin DMP programming and demo: "));
+  //  while (Serial.available() && Serial.read()); // empty buffer
 
     // load and configure the DMP
-    Serial.println(F("Initializing DMP..."));
+   // Serial.println(F("Initializing DMP..."));
     devStatus = mpu->dmpInitialize();
 
     // supply your own gyro offsets here, scaled for min sensitivity
@@ -222,7 +151,7 @@ void DESP_Gyro::init(){
     // make sure it worked (returns 0 if so)
     if (devStatus == 0) {
         // turn on the DMP, now that it's ready
-        Serial.println(F("Enabling DMP..."));
+      //  Serial.println(F("Enabling DMP..."));
         mpu->setDMPEnabled(true);
 
         // enable Arduino interrupt detection
@@ -231,7 +160,7 @@ void DESP_Gyro::init(){
         mpuIntStatus = mpu->getIntStatus();
 
         // set our DMP Ready flag so the main loop() function knows it's okay to use it
-        Serial.println(F("DMP ready! "));
+      //Serial.println(F("DMP ready! "));
         dmpReady = true;
 
         // get expected DMP packet size for later comparison
@@ -245,9 +174,9 @@ void DESP_Gyro::init(){
         // 1 = initial memory load failed
         // 2 = DMP configuration updates failed
         // (if it's going to break, usually the code will be 1)
-        Serial.print(F("DMP Initialization failed (code "));
-        Serial.print(devStatus);
-        Serial.println(F(")"));
+//       Serial.print(F("DMP Initialization failed (code "));
+//       Serial.print(devStatus);
+//       Serial.println(F(")"));
     }  
 }
 
@@ -258,10 +187,10 @@ void DESP_Gyro::goLeft(int deg){
    if (targbearing<-180)
     targbearing=360+targbearing;
    turning=true;
-   Serial.print("Turning 90 degrees left from ");
-   Serial.print(curbearing,DEC);
-   Serial.print(" to ");
-   Serial.println(targbearing,DEC);       
+//   Serial.print("Turning 90 degrees left from ");
+//   Serial.print(curbearing,DEC);
+//   Serial.print(" to ");
+//   Serial.println(targbearing,DEC);       
 }
 
 void DESP_Gyro::goRight(int deg){
@@ -271,10 +200,10 @@ void DESP_Gyro::goRight(int deg){
    if (targbearing>180)
     targbearing=targbearing-360;
    turning=true;
-   Serial.print("Turning 90 degrees right from ");
-   Serial.print(curbearing,DEC);
-   Serial.print(" to ");
-   Serial.println(targbearing,DEC);       
+//   Serial.print("Turning 90 degrees right from ");
+//   Serial.print(curbearing,DEC);
+//   Serial.print(" to ");
+//   Serial.println(targbearing,DEC);       
 }
 
 int DESP_Gyro::getBearingDistance(float b1,float b2){

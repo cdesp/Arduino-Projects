@@ -6,6 +6,7 @@
 
 DESP_Commands::DESP_Commands() {
   cmd=0; 
+  isFunctionIF=NULL;
 }
 
 void DESP_Commands::init() {
@@ -88,13 +89,12 @@ boolean DESP_Commands::isVarValid(int8_t varidx){
 
 boolean DESP_Commands::isContainerCommand(){
   switch (cmd->cmdid){
-    //Block Commands
-   case 70: //Loop %p time
-   case 72: //Loop all the time
-           return true;
+    //container Commands
+    //TODO: add user procedures or functions
+    //       return true;
    
    default:
-           return isControlCommand();//All control commands (i.e. IFs) are containers
+           return isLoopCommand() || isControlCommand();//All control commands (i.e. IFs) and loops are containers
   }
   
 }
@@ -112,18 +112,24 @@ boolean DESP_Commands::isLoopCommand(){
   
 }
 
-boolean DESP_Commands::isControlCommand(){
+boolean DESP_Commands::isControlCommand(){ //IFs
+	
+	if (isFunctionIF!=NULL)
+		return isFunctionIF(cmd->cmdid); //Let the user set the control commands
+	
   switch (cmd->cmdid){
     
-   
+   case 94:  //check digitalpin is high
+   case 95:	 //check digitalpin is low
    case 136: //IR distance sensor	
-   case 141: //Usonic Device if distance greater
-   case 142: //Usonic Device if distance less		
+   case 141: //Usonic Device if distance greater,etc
    case 146: //Switch device
-   case 171: //Temp GT	
-   case 172: //Temp LT
-   case 173: //Humid GT
-   case 174: //Humid LT		
+   case 166: //Moisture
+   case 171: //Temp GT,etc	
+   case 173: //Humid GT,etc
+   case 177: //pressure
+   case 178: //relative pressure
+   case 179: //temp from bmp180		
            return true;
    
    default:
@@ -168,6 +174,7 @@ boolean DESP_Commands::isStringCommand(int id){
   switch (id){
     
    case 121://LCDprint
+   case 124:	
    case 125:
            return true;
    
@@ -190,7 +197,7 @@ void DESP_Stack::push(DESP_Commands *cmds){
 }
 
 struct DESP_Commands * DESP_Stack::pop(){
- if ((cur>-1)  and (cur<stacksize)){
+ if ((cur>-1)  and (cur<STACKSIZE)){
   return myStack[cur--];
  }
  else
@@ -203,6 +210,7 @@ struct DESP_Commands * DESP_Stack::pop(){
 DESP_Interpreter::DESP_Interpreter() {
   running=false;
   evaluate=0;
+  isFunctionIF=NULL;
   program= new DESP_Commands; //create the main commands class
 //  stack= new DESP_Stack; 
 }
@@ -220,6 +228,10 @@ void DESP_Interpreter::init() {
 
 }
 
+void DESP_Interpreter::setfuncif(isfuncif myfunc){
+	isFunctionIF=myfunc; //save it for later
+	program->isFunctionIF=myfunc;
+}
 
 void DESP_Interpreter::startProgram() {
 	if (evaluate!=0){
@@ -334,7 +346,7 @@ struct DspCommand* DESP_Interpreter::addCommand(int id,int par1,int par2,int dev
      program->cmd->devid=devid;
      program->cmd->param1=par1; 
      program->cmd->param2=par2; 
-     program->cmd->paramstr=NULL;
+     program->cmd->paramstr=NULL;     
    }
   if (program->isContainerCommand()||program->isControlElseCommand(id)){
   	if (program->isLoopCommand())
@@ -346,10 +358,12 @@ struct DspCommand* DESP_Interpreter::addCommand(int id,int par1,int par2,int dev
     if (program->isControlElseCommand(id)){//else command adds the commands to the else container
      program->cmd->elseCmds= new DESP_Commands;//create a command list class for the esle clause all commands that follow goes in here until container ended code 99 or 100 =else
      program=program->cmd->elseCmds;    
+     program->isFunctionIF=isFunctionIF;
    }
     else{
      program->cmd->containerCmds= new DESP_Commands;//create a command list class for the container all commands that follow goes in here until container ended code 99 or 100 =else
-     program=program->cmd->containerCmds;    
+     program=program->cmd->containerCmds;
+     program->isFunctionIF=isFunctionIF;    
    }
   }
    

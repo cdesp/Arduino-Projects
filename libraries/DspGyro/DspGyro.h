@@ -3,19 +3,13 @@
 
 
 #include "Arduino.h"
-#include "helper_3dmath.h"
-//#include <..\MPU6050\helper_3dmath.h>
+#include <helper_3dmath.h>
 
 #define MPU6050_INCLUDE_DMP_MOTIONAPPS20
+//#include "MPU6050_6Axis_MotionApps20.h"
 #include "MPU6050.h"
-//#include <..\MPU6050\MPU6050.h>
 
 
-//#define OUTPUT_READABLE_QUATERNION
-#define OUTPUT_READABLE_YAWPITCHROLL
-//#define OUTPUT_READABLE_REALACCEL
-//#define OUTPUT_READABLE_WORLDACCEL
-//#define OUTPUT_TEAPOT
 
 
 typedef void (*remdebug) (String) ;
@@ -40,16 +34,12 @@ class DESP_Gyro
     
 // orientation/motion vars
     Quaternion q;           // [w, x, y, z]         quaternion container
-    VectorInt16 aa;         // [x, y, z]            accel sensor measurements
-    VectorInt16 aaReal;     // [x, y, z]            gravity-free accel sensor measurements
-    VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measurements
+  //  VectorInt16 aa;         // [x, y, z]            accel sensor measurements
+  //  VectorInt16 aaReal;     // [x, y, z]            gravity-free accel sensor measurements
+  //  VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measurements
     VectorFloat gravity;    // [x, y, z]            gravity vector
-    float euler[3];         // [psi, theta, phi]    Euler angle container
     float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
     float yprpre[3];  
-
-// packet structure for InvenSense teapot demo
-    uint8_t teapotPacket[14];    
     int redogyro;  
     
     
