@@ -37,8 +37,8 @@ int RECV_PIN = A5; //define input pin on Arduino for IR Receiver  was 3
 #define motEN 30
 
 //speed encoder pin and interrupt no
-#define speedenc 19
-#define speedint 4
+#define speedencpin 19
+//#define speedint 4
 
 //Sonic Sensor
 int trPin=5;//4;

@@ -70,6 +70,7 @@ class DESP_Sensors
 	int trigPin,echoPin;
   int distanceMin,distanceLast,sonicEvery;
   unsigned long lstSonicCheck;
+  int lstPing;
   
   int getSonicDistanceold();
 	//IR obstacle Sensor

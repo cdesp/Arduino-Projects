@@ -1,6 +1,19 @@
 #include <Arduino.h>
 #include "CtrlPlatform.h"
 
+#define DSP_BMP180
+#define DSP_DHT
+#define DSP_SERVO
+#define DSP_SPEAKER
+#define DSP_LCD
+#define DSP_MOTOR
+#define DSP_ROBOT
+
+
+
+void getPressure();//forward declaration
+//Not Enought memory so comment out for NOW  MEM
+//BMP180 barometric is off due to memory lack
                                    
 void speedencint()//attach change photointerrupt here (Wrapper function for my class)
 {
@@ -281,18 +294,18 @@ boolean getProgramFromBT()
       
     }    
     if (BTSerial==NULL) {
-       Serial.print("Inp Byte: ");
-       Serial.print(c,DEC);    
-       Serial.print(" ");     
-       Serial.print(did,DEC);    
-       Serial.print(" ");                   
-       Serial.print(p1,DEC);  
-       Serial.print(" ");            
-       Serial.print(v1,DEC);        
-       Serial.print(" ");            
-       Serial.print(v2,DEC);        
-       Serial.print(" ");            
-       Serial.println(p2,DEC);        
+//       Serial.print("Inp Byte: ");
+//       Serial.print(c,DEC);    
+//       Serial.print(" ");     
+//       Serial.print(did,DEC);    
+//       Serial.print(" ");                   
+//       Serial.print(p1,DEC);  
+//       Serial.print(" ");            
+//       Serial.print(v1,DEC);        
+//       Serial.print(" ");            
+//       Serial.print(v2,DEC);        
+//       Serial.print(" ");            
+//       Serial.println(p2,DEC);        
        
        
     }
@@ -568,6 +581,17 @@ boolean evalfunc(DspCommand *cmd){
   
 }
 
+boolean isRoboDelayedCommand(int c){
+
+  switch(c){
+    case 52:
+    case 53:
+            return true;
+            break;                
+  }
+  return false;
+}
+
 boolean programExecute(){
 
   
@@ -578,16 +602,16 @@ boolean programExecute(){
   int bd;
   String s;
   int pin1;
+  int p1,p2;
 
   
   //if (dspgyro->turning) return false; 
   if (!interpreter.running) {return false;}//DoDebug(F("prog END"),0);} 
   
-  
   if (lastcommandexecuted){
      cmd=interpreter.getCommandToExecute();     
      if (cmd!=0){
-       // DoDebug("Command:",cmd->cmdid); 
+        DoDebug("Command:",cmd->cmdid); 
         com=cmd->cmdid;
         lastcommandexecuted=false;
         if (com!=lastcmdid)
@@ -595,9 +619,17 @@ boolean programExecute(){
         else setupcmds++; 
      }  else  com=2;               
   }  
-  else
+  else {
      com=lastcmdid;
+     if (isRoboDelayedCommand(com)){ //Robo commands
+      Robo->roboloop(); //check if target reached either turning or step move
+      lastcommandexecuted=Robo->isRoboIdle();
+      return false;
+     }
+  }
 
+   p1=interpreter.getParam1(cmd);
+   p2=interpreter.getParam2(cmd);
    if (com>-1)
      switch(com) {
        case 1:break;
@@ -606,14 +638,23 @@ boolean programExecute(){
             //  DoDebug(F("===================="),0);
               break;
 //===============DESP Robot ============================ 
+    #ifdef DSP_ROBOT
        case 50:   //Setup desp Robot
                 if (setupcmds==0) {
                   setDevicePin(cmd->devid,1,cmd->param1);
                   setDevicePin(cmd->devid,2,cmd->param2);
+                //  DoDebug(F("1st"),0);
+                //  Serial.println(cmd->param1);
+                //  Serial.println(cmd->param2);
                 } else if (setupcmds==1) { 
                   setDevicePin(cmd->devid,3,cmd->param1);
                   setDevicePin(cmd->devid,4,cmd->param2);
+                //  Serial.println(cmd->param1);
+                //  Serial.println(cmd->param2);
+                //  DoDebug(F("2nd"),0);
                 } else {       //3rd time we init the device                           
+                //  DoDebug(F("3rd"),0);
+                //   Serial.println(cmd->param1);
                   devce=getDeviceById(cmd->devid);
                   Robo=new CP_Robot;                
                   devce->devpointer=(int)(Robo);  
@@ -622,9 +663,52 @@ boolean programExecute(){
                     pinMode (cmd->param1, INPUT) ;
                     attachInterrupt(digitalPinToInterrupt(cmd->param1), speedencint, CHANGE);
                   }
+                 // DoDebug(F("Robo ready"),0);
                 }
               break;       
+        case 51://Command Robot 1= forw 2=backw 4=stop
+                //get motor command 1=forward 2=backward 4=stop
+                 p1=interpreter.getParam1(cmd);
+                Robo->run(p1);
+              //  DoDebug(F("ROBO Cmd="),p1);
+              break;
+        case 52://turn right=5 or left=6                
+                //p1=get direction
+                //p2=get degrees
+                switch (p1){
+                  //Not Enought memory so comment out for NOW  MEM
+                  case 5:Robo->turnRight(p2);break;
+                  case 6:Robo->turnLeft(p2);break;
+                }
+               // DoDebug(F("ROBO turn Cmd="),p1);
+              break;   
+        case 53://Step Move
+               //p1=get motor command 1=Step forward 2=Step backward
+               switch (p1){
+                case 1:Robo->stepForward();break;
+                case 2:Robo->stepBackward();break;
+               }
+              // DoDebug(F("ROBO Step Cmd"),p1);
+              break;
+        case 54://turn right=5 or left=6                
+                //p1=get direction
+                //p2=get time to turn in secs
+                switch (p1){
+                  //Not Enought memory so comment out for NOW  MEM
+                  case 5:Robo->goRight();break;
+                  case 6:Robo->goLeft();break;
+                }
+                if (p2==0) p2=3;
+                delay(p2*1000);
+                Robo->run(4);//Stop
+               // DoDebug(F("ROBO turn Cmd="),p1);
+              break;           
+        case 55:
+               Robo->setStepTicks(p1);  
+              break;
+   #endif           
 //===============DESP MOTOR ============================   
+   #ifdef DSP_MOTOR
        case 60: //Setup despmotor
                 setDevicePin(cmd->devid,1,cmd->param1);
                 setDevicePin(cmd->devid,2,cmd->param2);
@@ -634,17 +718,19 @@ boolean programExecute(){
                 Motor->init(++motid,cmd->param1,cmd->param2);
               break;      
        case 61: //Command motor
-                n=interpreter.getParam1(cmd);//get motor command 1=forward 2=backward 4=stop
+                //p1=get motor command 1=forward 2=backward 4=stop
                 devce=getDeviceById(cmd->devid);  
                 Motor=(DESP_DCMotor*)((void*)(devce->devpointer));
-                Motor->run(n);
+                Motor->run(p1);
               break;  
        //70,72 - special loop commands
        //75- 90 special fixed variables from devices
        //99  is a special command no use   END         
        //100 is a special command no use   ELSE    
        //--------- Devices setup & commands
-//===============SPEAKER BUZZER ============================        
+    #endif   
+//===============SPEAKER BUZZER ============================    
+   #ifdef  DSP_SPEAKER
        case 110:       //setup speaker
                 setDevicePin(cmd->devid,1,cmd->param1);//Speakerpin
                 devce=getDeviceById(cmd->devid);  
@@ -659,11 +745,13 @@ boolean programExecute(){
        case 112:
                 devce=getDeviceById(cmd->devid);  
                 speak=(Speaker*)((void*)(devce->devpointer));
-                n=interpreter.getParam1(cmd);//cmd->param1;
-                d=interpreter.getParam2(cmd);//cmd->param2;
-                speak->PlayTone(n,d);
+               //p1=cmd->param1;
+                //p2=cmd->param2;
+                speak->PlayTone(p1,p2);
                 break;
-//===============LCD SCREEN ============================                
+    #endif            
+//===============LCD SCREEN ============================  
+   #ifdef DSP_LCD              
        case 120:setuplcd(); //just one lcd so no need to keep track of the sda/scl address
               break;
        case 121:s=cmd->paramstr;
@@ -676,23 +764,22 @@ boolean programExecute(){
        case 123:
                 if (lcd!=NULL) 
                 {
-                  d=interpreter.getParam1(cmd);
-                  n=interpreter.getParam2(cmd);
                 //  DoDebug(F("LCD SET P1="),d);
                 //  DoDebug(F("LCD SET P2="),n);
-                  lcd->setCursor(d,n);
+                  lcd->setCursor(p1,p2);
                 }  
                 break;
        case 124://LCD print number
-                s=String(interpreter.getParam1(cmd)); 
+                s=String(p1); 
                 LCDprint(s);
                 //Serial.println(s);
                 break;
        case 125://LCD print STRING AND number
                 s=cmd->paramstr;
-                LCDprint(s);LCDprint(String(interpreter.getParam1(cmd)));
+                LCDprint(s);LCDprint(String(p1));
                // Serial.print(s);Serial.println(interpreter.getParam1(cmd));
                 break;
+   #endif             
 //===============LASER============================                
        case 130: //Laser setup
                 pinMode(cmd->param1,OUTPUT);
@@ -736,7 +823,8 @@ boolean programExecute(){
                 setDevicePin(cmd->devid,4,0); //Time last check value
                 break;     
             //146 if Switch==HIGH on eval switch is on
-//===============MICROSERVO 90 ============================                
+//===============MICROSERVO 90 ============================    
+ #ifdef DSP_SERVO              
        case 150: //Servo setup
                 devce=getDeviceById(cmd->devid);  
                 serv=new Servo();
@@ -747,17 +835,15 @@ boolean programExecute(){
                 break;     
        case 151: //Servo Left
                 devce=getDeviceById(cmd->devid);  
-                serv=(Servo*)((void*)(devce->devpointer));
-                n=interpreter.getParam1(cmd);
-                d=max(90-n,0);
+                serv=(Servo*)((void*)(devce->devpointer));                
+                d=max(90-p1,0);
                 serv->write(d);
                 setDevicePin(cmd->devid,2,d);//set current position as param2 not used
                 break;     
        case 152: //Servo Right
                 devce=getDeviceById(cmd->devid);  
                 serv=(Servo*)((void*)(devce->devpointer));
-                n=interpreter.getParam1(cmd);
-                d=min(90+n,180);
+                d=min(90+p1,180);
                 serv->write(d);
                 setDevicePin(cmd->devid,2,d);//set current position as param2 not used
                 break;         
@@ -765,21 +851,20 @@ boolean programExecute(){
                 devce=getDeviceById(cmd->devid);  
                 serv=(Servo*)((void*)(devce->devpointer));
                 d=getDevicePin(cmd->devid,2);//get current position as param2 not used
-                n=interpreter.getParam1(cmd);
-                d=max(d-n,0);
+                d=max(d-p1,0);
                 serv->write(d);
                 setDevicePin(cmd->devid,2,d);//set current position as param2 not used
                 break;     
        case 154: //Servo Right add
                 devce=getDeviceById(cmd->devid);  
                 serv=(Servo*)((void*)(devce->devpointer));
-                d=getDevicePin(cmd->devid,2);//get current position as param2 not used
-                n=interpreter.getParam1(cmd);
-                d=min(d+n,180);
+                d=getDevicePin(cmd->devid,2);//get current position as param2 not used                
+                d=min(d+p1,180);
                 serv->write(d);
                 setDevicePin(cmd->devid,2,d);//set current position as param2 not used
                 break; 
-//===============PHOTOINTERRUPT ============================                        
+    #endif                
+//===============PHOTOINTERRUPT ============================  included in ROBO                      
        case 160://Photointerrupt Setup for distance measure make a class for this
                 //needs interrupt pin (2,3) for nano
                 //needs count number for 1 cm so we can check distance i.e. 10 changes makes 1 cm
@@ -788,7 +873,7 @@ boolean programExecute(){
                 break;
        //case 162://eval if distance traveled > %p2 in CM
        //case 163://eval if distance traveled < %p2 in CM
-//===============MOISTURE SENSOR ============================
+//===============MOISTURE SENSOR ============================ All Ananlog in Devices
        case 165://Setup Moisture sensor analog pin device just read this or other analog read device
                 pinMode(cmd->param1,INPUT);
                 setDevicePin(cmd->devid,1,cmd->param1);//no vars on setup
@@ -797,11 +882,13 @@ boolean programExecute(){
        //case 166 //eval if moisture > %p2 or other analog read device
        //case 167 //eval if moisture < %p2 or other analog read device
 //===============DHT TEMPERATURE ============================       
+     #ifdef DSP_DHT  
        case 170: //DHT temperature setup
                // DoDebug(F("Setup Temp"),cmd->param1);
                 devce=getDeviceById(cmd->devid);  
                 //DoDebug(F("DHT p1="),cmd->param1);
                 //DoDebug(F("DHT p2="),cmd->param2);
+               
                 dht=new DHT(cmd->param1,cmd->param2,0);//pin, type  (#define DHT11 11,#define DHT22 22,#define DHT21 21,#define AM2301 21)
                 devce->devpointer=(int)(dht);
                 setDevicePin(cmd->devid,1,cmd->param1);//Pin  no vars on setup
@@ -813,9 +900,12 @@ boolean programExecute(){
        //case 172 //eval if temp<%p2       
        //case 173 //eval if humidity>%p2
        //case 174 //eval if humidity<%p2   
+     #endif         
 //===============BMP180 BAROMETRIC SENSOR ============================           
+     #ifdef DSP_BMP180  
        case 176://BMP180 barometric Setup ONLY ONE SDA/SCL Device
                 devce=getDeviceById(cmd->devid);
+
                 bmp=new SFE_BMP180;
                 devce->devpointer=(int)(bmp);
                 bmp->begin();
@@ -823,73 +913,69 @@ boolean programExecute(){
 //                   Serial.println(F("BMP180 init success"));
 //                else
 //                    Serial.println(F("BMP180 init fail\n\n"));    
+     
                 break;  
                 //78,79,80 are the device variables
        //case 177// eval if Pres>%p2           
        //case 178// eval if relP>%p2           
        //case 179// eval if bmpTemp>%p2
-
+     #endif  
 //===================SETUP PIN FOR OUTPUT===================================       
        case 200:          
-                n=interpreter.getParam1(cmd);            
-                pinMode(n, OUTPUT);
+                pinMode(p1, OUTPUT);
                 break;
 //===================SETUP PIN FOR INPUT===================================                       
        case 201:     
-                n=interpreter.getParam1(cmd);                
-                pinMode(n, INPUT);
+                pinMode(p1, INPUT);
                 break;
 //===================SET PIN TO HIGH===================================                       
        case 202:      
-                n=interpreter.getParam1(cmd);              
-                digitalWrite(n, HIGH);   
+                digitalWrite(p1, HIGH);   
                 break;   
 //===================SET PIN TO LOW===================================                                       
        case 203:             
-                n=interpreter.getParam1(cmd);         
-                digitalWrite(n, LOW);
+                digitalWrite(p1, LOW);
                 break;  
 //===================VARIABLES===================================                                       
        case 230://set variable to value
                 //param2 has the idx of the var
                 //param1 has the value
-                n=interpreter.getParam1(cmd);         
-                d=interpreter.getParam2(cmd);         
             //    DoDebug(F("Set param idx="),d);                
             //    DoDebug(F("Value="),n);
-                pin1=interpreter.getVar(d);
+                pin1=interpreter.getVar(p1);
             //    DoDebug(F("Old Value="),pin1);
-                interpreter.setVar(d,n);
-                pin1=interpreter.getVar(d);
+                interpreter.setVar(p2,p1);
+            //    pin1=interpreter.getVar(p2);
             //    DoDebug(F("new Value="),pin1);                
                 break;
        case 231://change variable by value
                 //param2 has the idx of the var
                 //param1 has the value
-                n=interpreter.getParam1(cmd);         
-                d=interpreter.getParam2(cmd);         
-            //    DoDebug(F("Set param idx="),d);                
-            //    DoDebug(F("Value="),n);
-                pin1=interpreter.getVar(d);
+            //    DoDebug(F("Set param idx="),p2);                
+            //    DoDebug(F("Value="),p1);
+                pin1=interpreter.getVar(p2);
             //    DoDebug(F("Old Value="),pin1);
-                interpreter.setVar(d,pin1+n);//change the old value by n
-                pin1=interpreter.getVar(d);
+                interpreter.setVar(p2,pin1+p1);//change the old value by n
+             //   pin1=interpreter.getVar(p2);
             //    DoDebug(F("new Value="),pin1);                
                 break;
 //===================DELAY MILLISECS===================================                                       
        case 250:
-                n=interpreter.getParam1(cmd);
-                delay(n);
+                delay(p1);
                 break;                               
       }        
       
   interpreter.commandExecuted();
  // DoDebug(F(" // Command Executed // "),0);
- // if (com==10 || com==20 || com==30 || com==40)                     
-  lastcmdid=com;
-  lastcommandexecuted=true;
+  boolean ff=isRoboDelayedCommand(com);//stepmove or turn take time to finish
+  if (ff)
+    lastcmdid=com;
+  else  
+   lastcommandexecuted=true;
+
+  if (com==50) lastcmdid=com;//setup robo
   
-  return !(com==10 || com==20 || com==30 || com==40);                    
+  return !ff;                    
 }
 
 
@@ -927,7 +1013,7 @@ void getPressure(){
   char status;
   double T,P,p0,a;
   
-
+  
   if (bmp==NULL) exit;
 
   status = bmp->startTemperature();
@@ -943,19 +1029,7 @@ void getPressure(){
     status = bmp->getTemperature(T);
     if (status != 0)
     {
-      // Print out the measurement:
-    //  Serial.print("temperature: ");
-    //  Serial.print(T,2);
-    //  Serial.print(" deg C, ");
-    //  Serial.print((9.0/5.0)*T+32.0,2);
-    //  Serial.println(" deg F");
-
       bmpTemp=T;
-      // Start a pressure measurement:
-      // The parameter is the oversampling setting, from 0 to 3 (highest res, longest wait).
-      // If request is successful, the number of ms to wait is returned.
-      // If request is unsuccessful, 0 is returned.
-
       status = bmp->startPressure(3);
       if (status != 0)
       {
@@ -971,12 +1045,6 @@ void getPressure(){
         status = bmp->getPressure(P,T);
         if (status != 0)
         {
-          // Print out the measurement:
-         // Serial.print("absolute pressure: ");
-         // Serial.print(P,2);
-         // Serial.print(" mb, ");
-         // Serial.print(P*0.0295333727,2);
-         // Serial.println(" inHg");
 
           Pres=P;
           // The pressure sensor returns abolute pressure, which varies with altitude.
@@ -986,11 +1054,6 @@ void getPressure(){
           // Result: p0 = sea-level compensated pressure in mb
 
           p0 = bmp->sealevel(P,ALTITUDE); // we're at 1655 meters (Boulder, CO)
-          //Serial.print("relative (sea-level) pressure: ");
-          //Serial.print(p0,2);
-          //Serial.print(" mb, ");
-          //Serial.print(p0*0.0295333727,2);
-          //Serial.println(" inHg");
 
           relP=p0;
           
@@ -1071,7 +1134,7 @@ void loop()
           DoProgram();
           break;
   }
-                            
+
  
 }
 

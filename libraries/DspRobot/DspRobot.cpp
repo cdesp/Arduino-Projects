@@ -10,7 +10,7 @@ DESP_Robot::DESP_Robot() {
   ENPin=-1;
   robomode=rc2;
   rcmd=rcStop;
-  stepMoveTime=1000; //for 1 step forwrd or backward in millis
+  stepMoveTime=5000; //for 1 step forwrd or backward in millis
   stepTurnTime=6;//for 1 degree turn in millis
   stepMoveinCm=15;//15 cm each step
   clearDistance();
@@ -27,7 +27,7 @@ void DESP_Robot::init(int enp,int rmot1p1,int rmot1p2,int rmot2p1,int rmot2p2,in
 }
 
 void DESP_Robot::Backward(){
- Stop(false);
+ //Stop(false);
  if (lastrcmd!=rcBackward){
  	 delay(100);
  	 Stop(true);
@@ -45,7 +45,7 @@ void DESP_Robot::Backward(){
 }
 
 void DESP_Robot::Forward(){
- Stop(false);
+ //Stop(false);
 if (lastrcmd!=rcForward){
  	 delay(100);
  	 Stop(true);
@@ -72,11 +72,13 @@ void DESP_Robot::Stop(boolean full){
  motor4.run(RELEASE);
  delay(25);}
  
+ if (lastrcmd!=rcStop){
  distanceTravelled=mydist-lastdist;
  lastdist=mydist;
+ }
  
  rcmd=rcStop;
-//lastrcmd=rcmd;
+//lastrcmd=rcmd; //was commented to work with full=false
 }
 
 void DESP_Robot::left(){
@@ -159,8 +161,13 @@ String DESP_Robot::checkTimetoStop(){
 
 	if (rcmd==rcStop) return "";
 	else	
-	if ( roboTimeIsUp()){		
-		Stop(false);
+	//if ( roboTimeIsUp()){	
+	if (moveIsUpCM()){
+		//Serial.println("==");
+		//Serial.println(distanceNowCM());	
+		Stop(true);//Stop(false);
+		//Serial.println(inCM(distanceTravelled));	
+		//Stop(true);
 		return "Stopped: time is up!!!";
 	}
 	else
@@ -177,7 +184,8 @@ boolean DESP_Robot::moveIsUp(){
 }
 
 boolean DESP_Robot::turnIsUp(){
-	return (rcmd==rcLeft || rcmd==rcRight) && isTimeUp(motortime,lastAngle*stepTurnTime);
+	return false;
+	//return (rcmd==rcLeft || rcmd==rcRight) && isTimeUp(motortime,lastAngle*stepTurnTime);//for time turn not used
 }
 
 boolean DESP_Robot::moveIsUpCM(){
@@ -186,7 +194,7 @@ boolean DESP_Robot::moveIsUpCM(){
 
 
 boolean DESP_Robot::isDistanceReached(){	
-	return (abs(distanceNowCM())>=stepMoveinCm);
+	return abs(distanceNowCM())>=stepMoveinCm;
 }
 
 boolean DESP_Robot::roboTimeIsUp(){
@@ -227,17 +235,21 @@ RoboCommand DESP_Robot::RoboState(){
 }
 
 int DESP_Robot::distanceNowCM(){
-	return inCM(mydist-lastdist);
+//	Serial.print("my last:");
+	//Serial.print(inCM(mydist));Serial.print(" ");Serial.println(inCM(lastdist));
+	return inCM(mydist)-inCM(lastdist);
 }
 
 void DESP_Robot::clearDistance(){
 	  mydist=0;
+	  lastdist=0;
     distanceTravelled=0;
+  //  Serial.print("Step=");Serial.println(stepMoveinCm);
 }
 
 float DESP_Robot::inCM(int dist){
 
-  return mydist/0.85;
+  return dist/0.85;
 }
 
 void DESP_Robot::motorFrontLeft(boolean FORW){

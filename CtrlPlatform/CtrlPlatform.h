@@ -38,7 +38,7 @@
 typedef struct actdevice
 {
   int8_t actdevid; //signed byte
-  int param[3];
+  int param[4];
   uintptr_t  devpointer;
 } actdevice;
 

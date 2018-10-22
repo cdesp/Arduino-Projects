@@ -21,6 +21,8 @@
 
 #define HALFSTEP 8
 
+#define BTDEBUG 
+
                       
 //PCF8575 expander;
 boolean useexpander=false;
@@ -86,6 +88,7 @@ void setup() {
   Serial.println("Serial comm ok!");                                 
   
   interpreter.evaluate=evalfunc;
+  interpreter.setfuncif(isIFfunc); 
   
                       
   BTSerial.begin(9600);
@@ -124,8 +127,8 @@ void setup() {
   Myrobo.stepMoveinCm=10;                     
   Myrobo.useTimeDistance=false;                                           
   Myrobo.Stop(true);
-  pinMode (speedenc, INPUT) ;
-  attachInterrupt(speedint, speedencint, CHANGE);
+  pinMode (speedencpin, INPUT) ;
+  attachInterrupt(digitalPinToInterrupt(speedencpin), speedencint, CHANGE);
   lcd.clear();
   lcd.print("Robo OK....");
                
@@ -308,41 +311,46 @@ void Robotloop(){
 int readSonicSensor(){
   int d1,d2,d3;
 
-  delay(200);  
+//return Mysensors.getSonicDistance();
+  Myrobo.Stop(true);  
+  delay(150);  
   d1=Mysensors.getSonicDistance();
-  delay(200);
+  delay(100);
   d2=Mysensors.getSonicDistance();
-  delay(200);
-  d3=Mysensors.getSonicDistance(); 
-  return min(min(d1,d2),d3);
+//  delay(10);
+//  d3=Mysensors.getSonicDistance(); 
+  //return min(min(d1,d2),d3);
+  return min(d1,d2);
   
 }
 
-int distSensorFront(){
+int distSensorFront(int tmes=1){
   int dout;
 
-  
+//  delay(50);
   dout=readSonicSensor();
-  if (dout==99) {
-    delay(250);
-    dout=distSensorFront();    
-  }
-  BTSerial.print("Dist Front:");
+  delay(50);
+//  if (dout==99 && tmes++<3) {
+//    delay(150);
+ //   dout=distSensorFront(tmes);    
+ // }
+  BTSerial.print("Dst F:");
   BTSerial.println(dout);
   return dout;
 }
 
 
-int distSensorLeft(){
+int distSensorLeft(int tmes=1){
   int dout;
 
   
   DoTurn(1023);
+  //delay(250);
   dout=readSonicSensor();
-  if (dout==99) {
+  if (dout==99 && tmes++<3) {
     distSensorLeftReset();
-    delay(250);
-    dout=distSensorLeft();    
+    delay(150);
+    dout=distSensorLeft(tmes);    
   }
   BTSerial.print("Dist Left:");
   BTSerial.println(dout);
@@ -355,15 +363,17 @@ void distSensorLeftReset(){
 }
 
 
-int distSensorRight(){
+int distSensorRight(int tmes=1){
   int d1,d2,d3,dout;
     
   DoTurn(-1023);
+ // delay(250);
   dout=readSonicSensor();
-  if (dout==99) {
+  delay(50);
+  if (dout==99 && tmes++<3) {
     distSensorRightReset();
-    delay(250);
-    dout=distSensorRight();    
+    delay(150);
+    dout=distSensorRight(tmes);    
   }
   BTSerial.print("Dist Right:");
   BTSerial.println(dout);  
@@ -400,7 +410,7 @@ boolean obstright(){
 void checkobstacle(){
   
   Mysensors.checkStatus();
-
+ // Serial.println(Mysensors.distanceFront());
   if (!Mysensors.frontIsClear() && (Myrobo.RoboState()==rcForward)) {
     Myrobo.Stop(true);
 
@@ -488,11 +498,7 @@ unsigned long tm3=0;
 
 void loop3()
 {
-
-
-
-                         
-                                             
+                                 
                                         
   if (Serial.available()>0)
   {
@@ -570,7 +576,10 @@ boolean getProgramFromBT()
   
   if (siz<1) {
    Serial.println("Invalid Size. abort");
-    Myrobo.robomode=rc2;                   
+    Myrobo.robomode=rc2;  
+    while (BTSerial.available())
+      BTSerial.read();    
+     BTSerial.println("Invalid Size. abort");  
     return false;
   }
 
@@ -625,6 +634,36 @@ boolean getProgramFromBT()
      
 }
 
+boolean isIFfunc(int cmdid){                          
+  switch(cmdid){
+
+  case 70://loop   
+  case 80:
+  case 81:
+  case 82:
+  case 83:
+  case 84:
+  case 85:
+  case 86:
+  case 87:
+  case 88:
+  case 89:
+  case 90:
+  case 91:
+  case 92:
+  case 93:
+  case 94:
+  case 95:
+  case 96:
+  case 97:
+  case 98:
+           return true;
+   
+   default:
+           return false;    
+  }
+
+}
                                   
 boolean evalfunc(DspCommand *cmd){
   
@@ -706,6 +745,8 @@ boolean evalfunc(DspCommand *cmd){
 int lastcmdid=-1;
 float straightbearing=-1;
 boolean lastcommandexecuted=true;
+boolean lastmoveexecuted=true;
+int newcmdid=-1;
 
 boolean programExecute(){
 
@@ -716,9 +757,12 @@ boolean programExecute(){
   int bd;
   
   if (dspgyro.turning) return false; 
-  if (!interpreter.running) return false;
+  if (!interpreter.running && lastmoveexecuted) return false;
   
-  
+  if (!lastmoveexecuted){    
+    com= -1;
+    }
+  else  
   if (lastcommandexecuted){
      cmd=interpreter.getCommandToExecute();     
      if (cmd!=0){
@@ -727,8 +771,7 @@ boolean programExecute(){
         lastcommandexecuted=false;
      }  else  com=2;               
   }  
-  else
-     com=lastcmdid;
+
     
                                                                                        
   
@@ -737,8 +780,9 @@ boolean programExecute(){
    if (com>-1)
      switch(com) {
        case 1:break;
-       case 2:interpreter.endProgram();       
-              DoDebug("PROGRAM TERINATED!!!",0);
+       case 2:interpreter.endProgram(); 
+              lastcmdid=-1;      
+              DoDebug("PROGRAM TERMINATED!!!",0);
               DoDebug("====================",0);
               break;
        case 5:                         
@@ -747,28 +791,38 @@ boolean programExecute(){
                if (n>100) n=100;
                Myrobo.stepMoveinCm=n;
                break;
-       case 10:                  
-               gp=dspgyro.curbearing;
-               DoDebug("Bearing:",gp);
-               if (com!=lastcmdid){
-                 straightbearing=gp;
-                 DoDebug("StraightBearing:",gp);
-               }
-
-                bd=dspgyro.getBearingDistance(straightbearing,gp);
-                DoDebug("distance:",bd);
-                if (abs(bd)<5)
-                   Myrobo.stepForward();                
-                else
-                {                                  
-                  mybeep();
-                  dspgyro.gotoBearing(straightbearing);
-                  DoDebug("Straight:",straightbearing);
-                  lastcmdid=com;
-                  return false;                       
-                }
-              break;   
-       case 20:
+//       case 10:         
+//               lastmoveexecuted=false;
+//               gp=dspgyro.curbearing;
+//               DoDebug("Bearing:",gp);
+//               if (com!=lastcmdid){
+//                 straightbearing=gp;
+//                 DoDebug("StraightBearing:",gp);
+//               }
+//
+//                bd=dspgyro.getBearingDistance(straightbearing,gp);
+//                DoDebug("distance:",bd);
+//                if (abs(bd)<10) //10 degrees off
+//                {
+//                   DoDebug("StepForw",0); 
+//                   Myrobo.stepForward();                
+//                }
+//                else
+//                {           //correct our path                       
+//                  mybeep();
+//                  dspgyro.gotoBearing(straightbearing);
+//                  DoDebug("Straight:",straightbearing);
+//                  lastcmdid=com;
+//                  return false;                       
+//                }
+//              break;   
+       case 10:lastmoveexecuted=false;
+#ifdef BTDEBUG       
+               BTSerial.println("StepForw"); 
+#endif               
+               Myrobo.stepForward();   
+              break;
+       case 20:lastmoveexecuted=false;
                Myrobo.stepBackward();
               break;
        case 30:
@@ -812,15 +866,37 @@ boolean programExecute(){
                 delay(cmd->param1);
                 break;                               
       }        
-      
-  interpreter.commandExecuted();
-  if (com==10 || com==20 || com==30 || com==40)                     
-    lastcmdid=com;
-  lastcommandexecuted=true;
+  
+  if (com==10 || com==20 || com==30 || com==40)  
+    lastcmdid=com; //just keep it here because these commands take time
+
+  if (com>-1){
+    interpreter.commandExecuted();//setup next command
+    lastcommandexecuted=true;   
+  }
+
+  if (!lastmoveexecuted){
+    lastmoveexecuted=Myrobo.RoboState()==rcStop; 
+    if (lastmoveexecuted)   {
+#ifdef BTDEBUG
+      delay(100);
+     BTSerial.print("STEP end "); 
+     BTSerial.println(Myrobo.inCM(Myrobo.distanceTravelled));
+#endif     
+    }
+  }
+  
+
+  if (!lastmoveexecuted) return false;
   
   return !(com==10 || com==20 || com==30 || com==40);                    
 }
 
+
+boolean canPrint(){
+  return !(lastcmdid==10 || lastcmdid==20 ) ;
+  
+}
 
 void DoProgram()
 { boolean f;
@@ -830,6 +906,7 @@ void DoProgram()
     straightbearing=-1;
     lastcmdid=-1;
     lastcommandexecuted=true;    
+    lastmoveexecuted=true;
     if (getProgramFromBT()){
      lcd.setCursor(0, 0);
      lcd.print("                 ");
@@ -840,19 +917,21 @@ void DoProgram()
      interpreter.startProgram();                                             
     }
   }
-  else {
-    if (Myrobo.RoboState()==rcStop){                                   
+  else {    
+   // if (Myrobo.RoboState()==rcStop){                                   
                                                 
        tm=millis();
        do {
           f=programExecute();                    
-          if (!interpreter.running) {
-             Myrobo.robomode=rc2;                    
+          if (!interpreter.running && f) {
+             Myrobo.robomode=rc2;     
+             Myrobo.Stop(true);               
              DoDebug("Program Terminated!!!",0);
+             lastcmdid=-1;
           } 
-       } while (f and (millis()-tm<1000));                                                               
-    } else
-        DoDebug("RoboState:",Myrobo.RoboState());
+       } while (f and (millis()-tm<1000)); //for movement we exit asap so we can check sensors                                                              
+  //  } else
+  //      DoDebug("RoboState:",Myrobo.RoboState());
   }     
 }
 
@@ -905,13 +984,23 @@ void loop()
   
   String st;
   int turndeg=0;
+
+  if (lastmoveexecuted)
+    beardist=getGyroDeviation(); 
+  else beardist=0;        
+
+  st=Myrobo.checkTimetoStop();//check if robo has travelled the distance
+  if (st!="") { Serial.println(st); 
+#ifdef BTDEBUG
+      BTSerial.println(st);
+#endif      
+      }
+
+ // int tr=Myrobo.distanceNowCM();
+ // if (tr!=0) 
+ //   DoDebug("Tr: ",tr);
   
-  beardist=getGyroDeviation();       
-
-  st=Myrobo.checkTimetoStop();
-  if (st!="") Serial.println(st);      
-
-  if (!dspgyro.turning && Myrobo.robomode!=progload) checkobstacle();       
+  if (!dspgyro.turning && Myrobo.robomode!=progload) checkobstacle();   //USonic Sensor    
 
   lastcmd='~';
                                                   
@@ -1026,10 +1115,10 @@ void loop()
         turndeg=30;     
        else 
        if (abs(beardist)>30)
-        turndeg=20;     
+        turndeg=15;     
        else
        if (abs(beardist)>15)
-        turndeg=10;             
+        turndeg=5;             
        else{
         turndeg=1;
         
@@ -1044,23 +1133,20 @@ void loop()
   }   
 
 
- 
+  if (canPrint()) {
 
   if (millis()-tm3>300) {    
     showinfo1(); 
-                          
-                        
-
     tm3=millis();
   }
 
-  if (((millis()-tm2)>500) ){
+  if (millis()-tm2>500  ){
     showinfo0();
     showBLinfo();
     tm2=millis();
   }
 
-  if (millis()-tm4>600) {      
+  if (millis()-tm4>600  ) {      
     lcd.setCursor(4, 1);      
                            
     lcd.print(int(dspgyro.curbearing),DEC);
@@ -1072,6 +1158,8 @@ void loop()
     
     tm4=millis();
   }
+
+  }//canprint
 
 }
 

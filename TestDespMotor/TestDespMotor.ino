@@ -1,18 +1,24 @@
 #include <DspMotor.h>
 #include "SoftwareSerial.h" 
 
-#define Motpin1 11
-#define Motpin2 12
+#define Motpin11 11
+#define Motpin12 12
+#define Motpin21 9
+#define Motpin22 10
+
 
 DESP_DCMotor Motor1;
+DESP_DCMotor Motor2;
 
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
   Serial.println("Serial Ok");
-  Motor1.init(1,Motpin1,Motpin2);
+  Motor1.init(1,Motpin11,Motpin12);
   Serial.println("motor1 init");
+  Motor2.init(1,Motpin21,Motpin22);
+  Serial.println("motor2 init");
 }
 
 int s;
@@ -30,6 +36,7 @@ void loop() {
 
   if (cmd>0){
      Motor1.run(cmd);
+     Motor2.run(cmd);
      Serial.println(cmd);
   }
    

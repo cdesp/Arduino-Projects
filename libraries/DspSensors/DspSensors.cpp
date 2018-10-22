@@ -145,9 +145,10 @@ long duration, distance;
 
 int DESP_Sensors::getSonicDistance(){
 	 int echoTime=sonar.ping_median(5); //was 5
-	 lstSonicCheck=millis();
+	 //lstSonicCheck=millis();
 	 int pingcm = NewPingConvert(echoTime, US_ROUNDTRIP_CM);
-	 if (pingcm==0) pingcm=99;
+	 if (pingcm==0) pingcm=lstPing;
+	 lstPing=pingcm;	
 	 lstSonicCheck=millis();
 	 return pingcm;
 }

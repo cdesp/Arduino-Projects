@@ -132,7 +132,7 @@ void DESP_Gyro::init(){
 
     // verify connection
   //  Serial.println(F("Testing device connections..."));
-    Serial.println(mpu->testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
+    Serial.println(mpu->testConnection() ? F("6050 success") : F("6050 failed"));
 
     // wait for ready
   //  Serial.println(F("\nSend any character to begin DMP programming and demo: "));
@@ -200,10 +200,10 @@ void DESP_Gyro::goRight(int deg){
    if (targbearing>180)
     targbearing=targbearing-360;
    turning=true;
-//   Serial.print("Turning 90 degrees right from ");
-//   Serial.print(curbearing,DEC);
-//   Serial.print(" to ");
-//   Serial.println(targbearing,DEC);       
+  // Serial.print("Turning 90 degrees right from ");
+  // Serial.print(curbearing,DEC);
+  // Serial.print(" to ");
+  // Serial.println(targbearing,DEC);       
 }
 
 int DESP_Gyro::getBearingDistance(float b1,float b2){

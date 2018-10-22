@@ -3,7 +3,7 @@
 
 CP_Robot::CP_Robot() {
  distTravelled=0;
- 
+ stepTicks=10;
 }
 void CP_Robot::init(int m1pin1,int m1pin2,int m2pin1,int m2pin2,int myphotointpin,int mygyroaddr=MPU6050_DEFAULT_ADDRESS)
 {
@@ -11,6 +11,10 @@ void CP_Robot::init(int m1pin1,int m1pin2,int m2pin1,int m2pin2,int myphotointpi
   Motor1->init(1,m1pin1,m1pin2);
   Motor2=new DESP_DCMotor;
   Motor2->init(2,m2pin1,m2pin2);
+ // Serial.println(m1pin1);
+ // Serial.println(m1pin2);
+ // Serial.println(m2pin1);
+ // Serial.println(m2pin2);
   dspGyro=new DESP_Gyro(mygyroaddr);
   dspGyro->init(); //Calibrates also
   photopin=myphotointpin;
@@ -19,8 +23,8 @@ void CP_Robot::init(int m1pin1,int m1pin2,int m2pin1,int m2pin2,int myphotointpi
 }
 void CP_Robot::handleInterrupt()
 {
-  if (robostate==rcForward)  distTravelled++;
-  if (robostate==rcBackward) distTravelled--;
+  if (robostate==rcForward || robostate==rcForwStep)  distTravelled++;
+  if (robostate==rcBackward || robostate==rcBackStep) distTravelled--;
 }
 void CP_Robot::setStepTicks(int myticks)
 {
@@ -30,6 +34,14 @@ void CP_Robot::setNewstate(ROBOSTATE rs)
 {
   laststate=robostate;
   robostate=rs;
+}
+void CP_Robot::run(int cmd)
+{
+  switch(cmd) {
+    case FORWARD:runForward();break;
+    case BACKWARD:runBackward();break;
+    case RELEASE:runStop();break;    
+  }  
 }
 void CP_Robot::runForward()
 {
@@ -71,6 +83,7 @@ void CP_Robot::turnRight(int deg)
 {
   setNewstate(rcRight); 
   dspGyro->goRight(deg);
+  //Serial.println("Go right");
   goRight();
 }
 void CP_Robot::turnLeft(int deg) 
@@ -103,8 +116,13 @@ boolean CP_Robot::isTargetReached()
 {
  return  !dspGyro->turning;
 }
+boolean CP_Robot::isRoboIdle()
+{
+  return isTargetReached() && (robostate==rcStop);
+}
 void CP_Robot::roboloop()
 {
+ // Serial.print(distTravelled);Serial.print(">=");Serial.println(stepTicks);
   //check if we reached destination turning or moving
   switch(robostate)
   {
@@ -120,12 +138,15 @@ void CP_Robot::roboloop()
                    break;
   }
   if (!isTargetReached()){
+   // Serial.println("Turning");
     dspGyro->getSafeGyroPos();//safe but slow
     if (dspGyro->isTargetReached(maxdeviation)){  //Are we there yet?                                 
      runStop();        //could be off so we should recheck if problems occur
+    // Serial.println("Reached");
      dspGyro->targetReached(); 
     } else { //not there yet
      int dis=dspGyro->getDistance();//how far away we are
+    // Serial.print("dist: ");Serial.println(dis);
      if ((lastturndistance<0 && dis>0) || (lastturndistance>0 && dis<0) ) {//if we overdoit
       runStop(); 
       if (dis<0) goLeft(); else goRight();

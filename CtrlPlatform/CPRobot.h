@@ -44,7 +44,8 @@ class CP_Robot
   int curDegrees();
   int targDegrees();
   boolean isTargetReached();
-  void handleInterrupt(); 
+  void handleInterrupt();
+  void run(int cmd);
   void runForward();
   void runBackward();
   void runStop();
@@ -54,6 +55,7 @@ class CP_Robot
   void turnLeft(int deg);  
   void goRight();  
   void goLeft();
+  boolean isRoboIdle();
  };
 
 
