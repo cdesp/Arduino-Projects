@@ -458,7 +458,33 @@ void prnWindDirection(int w){
 
 void loop() {
   // put your main code here, to run repeatedly:
-  
+  String incoming,dts,tms,hs,ms,ys,mns,ds;
+
+  if (Serial.available() > 0) {
+    // read the incoming byte:
+    
+    incoming = Serial.readString();
+    if (incoming.charAt(0)=='D' || incoming.charAt(0)=='T'){
+      dts=incoming.substring(1,11);
+      ds=dts.substring(0,2);
+      mns=dts.substring(3,5);
+      ys=dts.substring(6,10);
+      tms=incoming.substring(12);
+      hs=tms.substring(0,2);
+      ms=tms.substring(3,5);
+      //Serial.println(dts);
+      //Serial.println(tms);
+
+    //  Serial.println(ys.toInt());
+      dts=ds+"/"+mns+"/"+ys+" ";
+      tms=hs+":"+ms;
+      RTC.adjust(DateTime(ys.toInt(),mns.toInt(),ds.toInt(),hs.toInt(),ms.toInt(),0));
+      
+      Serial.print(dts);
+      Serial.println(tms);
+      Serial.println("DATE TIME is set.");
+     }          
+  }
 
  if (millis()-mytime>=1000) {     
     cntpersec=cnt;cnt=0;mytime = millis();

@@ -16,7 +16,7 @@
 #include <LiquidCrystal_I2C.h>
 #include "DHT.h"
 #include <SFE_BMP180.h>
-#include "CPRobot.h" //TODO: Should control 2 DCMotors and a Gyro for turning Right and left by certain degrees. Also a photointerrupter to count distance travelled.
+#include "CPRobot.h" //DONE: Should control 2 DCMotors and a Gyro for turning Right and left by certain degrees. Also a photointerrupter to count distance travelled.
                     //Commands: Forward,backward,Stop, StepForward,StepBackward, Turn Left xx degrees, Turn Right xx degrees.
 
 
@@ -90,5 +90,3 @@ char lastcmd=' ';
 char nextcmd=' ';
 
 #endif
-
-
