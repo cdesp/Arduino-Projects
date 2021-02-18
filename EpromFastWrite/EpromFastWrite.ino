@@ -113,7 +113,7 @@ unsigned int i;
 }
 
 void doPermanent(){
-const unsigned int Addresses[] = {0x0E38, 0x31C7, 0x03E0, 0x3C1F, 0x303F, 0x0FC0}; //byte is big enough
+const unsigned int Addresses[] = {0x0E38, 0x31C7, 0x03E0, 0x3C1F, 0x303F, 0x0FC0}; 
 
   setDataInput();
   digitalWrite(RD,LOW);
@@ -128,7 +128,7 @@ const unsigned int Addresses[] = {0x0E38, 0x31C7, 0x03E0, 0x3C1F, 0x303F, 0x0FC0
 }
 
 void doRecall(){
-const unsigned int Addresses[] = {0x0E38, 0x31C7, 0x03E0, 0x3C1F, 0x303F, 0x0C63}; //byte is big enough
+const unsigned int Addresses[] = {0x0E38, 0x31C7, 0x03E0, 0x3C1F, 0x303F, 0x0C63}; 
 
   setDataInput();
   digitalWrite(RD,LOW);
