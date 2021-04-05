@@ -43,7 +43,7 @@ SdFat SD;
 
 struct strfile {
   byte fid;
-  SdFile fobj;  
+  SdFile file;  
 };
 
 const int MAXFILES=10;
@@ -71,24 +71,41 @@ void RTSOFF() {
 void sendChar(char c) {
   boolean brk=false;
   
-  RTSOFF();
+  RTSON(); //NOT READY TO RECEIVE
   //todo:set a timeout  
   do { } while (CTS() == HIGH); //if we can send
   mySerial.write(c);  //send
-  RTSON();
+  //RTSOFF(); //READY TO RECEIVE
 
 }
 
 boolean receiveChar(char &ch) {
  boolean got=false;
   
-  RTSOFF();
+  RTSOFF(); //READY TO RECEIVE
   if (mySerial.available()) {
     ch = mySerial.read();
+   // Serial.print(ch);Serial.print("-");Serial.print(byte(ch));Serial.println(" ");
     got=true;
   }
-  RTSON();
+  RTSON();//NOT READY TO RECEIVE
   return got;
+}
+
+//todo:set a timeout?
+boolean DOreceiveChar(char &ch) { 
+  while (!receiveChar(ch)) ;  
+}
+
+void textReceive(char *fn,int ml){
+  char ch;
+  
+  for (int i=0;i<ml;i++)
+  {
+     DOreceiveChar(ch);
+     fn[i]=ch;
+     if (ch==0) break;     
+  }
 }
 
 void sendtext(const __FlashStringHelper* tx){
@@ -123,6 +140,7 @@ void setup() {
   
   pinMode(CTSpin, INPUT_PULLUP);
   pinMode(RTSpin, OUTPUT);
+ 
 
   Serial.print("\nInitializing SD card...");
 
@@ -130,6 +148,7 @@ void setup() {
   // Use half speed like the native library.
   // change to SPI_FULL_SPEED for more performance.
   if (!SD.begin(chipSelect, SPI_HALF_SPEED)) SD.initErrorHalt();
+   else Serial.println("OK");
   
 
  // set the data rate for the SoftwareSerial port
@@ -177,6 +196,7 @@ int getemptyfileidx(){
 }
 
 
+
 //All commands 1 byte=CMD, 1 byte=ID, 2 bytes=Params  TOTAL 6 bytes
 //for filename we issue a read string after the command
 
@@ -205,9 +225,13 @@ const int POSITION=8;
 const int SEEKFILE=9;
 const int LISTDIR=10;
 const int CHANGEDIR=11;
+const int FILESIZE=12;
 const int INVALIDCMD=99;
 
-const int dely=100;
+const int FCMDOK=200;
+const int FNOTDIR=201;
+const int FNOTFND=202;
+const int FNOMOR=203;
 
 byte doListDir(){
  int cur=0;
@@ -237,12 +261,52 @@ byte doListDir(){
  itoa(cur, fBuffer, 10);
  sendtext((__FlashStringHelper *)F("Total Files:"));sendtext(fBuffer);sendNL();
  sendChar(char(255));//signal directory list ends
- return 0;
+ return 200;
+}
+
+byte findFile(SdFile &fl){
+  char fnm[30];
+  
+  
+  Serial.print("Search File:[");Serial.print(fname);Serial.println("]");
+  Serial.println(byte(fname[7]));
+  Serial.println(byte(fname[8]));
+  Serial.println(byte(fname[9]));
+  //curDir.printName(&Serial);
+  curDir.rewind();
+  while (fl.openNext(&curDir, O_RDONLY)) {    
+    fl.getName(fnm, 30);
+    //Serial.print("[");Serial.print(fnm);Serial.print("]-[");Serial.print(fname);Serial.println("]");
+    //Serial.println(strcmp(fname,fnm));
+    if (strcmp(fname,fnm)==0)
+      return FCMDOK; 
+    fl.close();   
+  }
+  Serial.println("...Not found");
+  return FNOTFND;
 }
 
 byte doChangeDir(){
+  SdFile fl;
+
+  
+  if (findFile(fl)==FCMDOK){
+      if (fl.isDir()){
+        curDir.close();
+        curDir=fl;
+        Serial.println(F("Dir Change OK"));
+        return FCMDOK; //all ok
+      }    
+      else return FNOTDIR; //dir name is not a dir
+  }
+  else return FNOTFND;//dir name NOT FOUND
+  
+}
+
+byte doChangeDir1(){
   char fnm[30];
   SdFile fl;
+
   
   //Serial.print("ChgDir:");Serial.println(fname);
   //curDir.printName(&Serial);
@@ -256,43 +320,119 @@ byte doChangeDir(){
         curDir.close();
         curDir=fl;
         Serial.println(F("Dir Change OK"));
-        return 0; //all ok
+        return 200; //all ok
       }
-      else return 1; //dir name is not a dir
+      else return 200+1; //dir name is not a dir
     }
     fl.close();   
   }
 
-   return 2; //dir name not found
+   return 200+2; //dir name not found
   
 }
 
+byte doOpenFile(){
+ SdFile fl;
+
+ if (findFile(fl)!=FCMDOK){
+    return FNOTFND; //file not found
+  }  
+  
+  int idx=getemptyfileidx();
+  if (idx==-1) return FNOMOR; //no more open files
+  filelist[idx].fid=idx+1;
+  filelist[idx].file=fl;
+  return idx;
+}
+
+byte doCloseFile(byte idx){
+
+ if (filelist[idx].fid==0) return FCMDOK; 
+ filelist[idx].fid=0;
+ filelist[idx].file.close();
+ return FCMDOK; 
+}
+
+byte doReadBlock(byte idx){
+   SdFile fl;
+  //read a block of bytes of a file
+  //Z80 asks an amount ARD returns the bytes that will be sent <=Z80 request
+  fl=filelist[idx].file;
+ 
+  int z80ask=param1*256+param2; //2bytes 
+  int bytesleft=fl.fileSize()-fl.curPosition();
+  if ((z80ask==0) or (bytesleft<z80ask)) z80ask=bytesleft;  
+  //send back the size we will send
+  byte bh=z80ask/256;
+  byte bl=z80ask%256;
+  sendChar(bh);sendChar(bl);
+  Serial.print(F("Bytes to return:"));Serial.println(z80ask);
+  Serial.println(F("Returning bytes"));
+  //send the block of data to z80
+  for (int i=0;i<z80ask;i++){
+    fl.read(&bl,1);  //read one byte
+    sendChar(bl);
+  }
+  Serial.println(F("ok"));
+ return FCMDOK; 
+}
+
+byte doFilesize(byte idx){
+   SdFile fl;
+   
+   if (findFile(fl)!=FCMDOK){
+    return FNOTFND; //file not found
+  }  
+  int sz=fl.fileSize();
+  byte bh=sz/256;
+  byte bl=sz%256;
+  sendChar(bh);sendChar(bl);
+  return FCMDOK; 
+}
+
+byte doPosition(byte idx){
+   SdFile fl;
+   
+   if (findFile(fl)!=FCMDOK){
+    return FNOTFND; //file not found
+  }  
+  int pos=fl.curPosition();
+  byte bh=pos/256;
+  byte bl=pos%256;
+  sendChar(bh);sendChar(bl);
+  return FCMDOK; 
+}
+
 void executeCommand(){
-  byte flid=cmdbuffer[3];
-  byte param1=cmdbuffer[4];
-  byte param2=cmdbuffer[5];
-  byte retparam=0;
+
+  byte retparam=255;
   Serial.print(F("command:"));Serial.println(Command);
   switch (Command){
     case OPENCARD:  openRoot();                    
                     retparam=totalFiles; //no more than 255 files i hope
                     break;
-    case OPENFILE:  break;
-    case CLOSEFILE: break;
+    case OPENFILE:  retparam=doOpenFile();
+                    break;
+    case CLOSEFILE: retparam=doCloseFile(fid);
+                    break;
     case READBYTE: break;
     case WRITEBYTE: break;
-    case READBLOCK: break;
+    case READBLOCK: retparam=doReadBlock(fid);
+                    break;
     case WRITEBLOCK: break;
-    case POSITION: break;
+    case POSITION:  retparam=doPosition(fid);
+                    break;
     case SEEKFILE: break;
     case LISTDIR:   retparam=doListDir();//todo:check if we have a name with the command and list that dir if exists
                     break;
     case CHANGEDIR: retparam=doChangeDir();
-                    break;    
+                    break;  
+    case FILESIZE:  retparam=doFilesize(fid);
+                    break;
   }
 
   sendChar(char(retparam));//always return a command result to Z80
-  Serial.print(F("Command Completed"));
+  Serial.print(F("Command Completed:"));Serial.println(byte(retparam));
 }
 
 
@@ -304,21 +444,73 @@ void interconnectports(){
     mySerial.write(Serial.read());   
 }
 
-void loop(void) {
-  if (mySerial.available()){
-    //take command 4 bytes
-    Serial.println(F("Getting command"));
-    for(int i=0;i<4;i++) {
-     char ch=mySerial.read();
-     cmdbuffer[i]=ch;
+void loop1(void) {
+  char ch;
+    RTSON();
+    if (receiveChar(ch)){
+     Serial.print(ch);Serial.print("-");Serial.print(byte(ch));Serial.println(" ");
     }
+  }
+
+void loop2(void){
+char ch;
+int i=0;
+Serial.print('[');
+  while (i<10){
+    if (receiveChar(ch)){
+      Serial.print(ch);
+      i++;
+     //Serial.print(ch);Serial.print("-");Serial.print(byte(ch));Serial.println(" ");
+    }      
+  }
+Serial.println(']');  
+}
+
+void loop3(void){
+    sendtext(F("1234567890"));
+    Serial.println(F("Send ok"));    
+}
+
+void loop5(){
+  if (Serial.available()){
+    char ch=Serial.read();
+    if (ch=='S')
+      loop3();
+    if (ch=='R')
+      loop2();  
+    Serial.println("S,R");  
+  }
+}
+
+void loop(void) {
+  char ch;
+ 
+  mySerial.flush();
+  do {
+    DOreceiveChar(ch);
+    
+  } while (ch==0);
+  Serial.print(F("Getting command ["));
+  cmdbuffer[0]=ch;
+  Serial.print(byte(ch));Serial.print(" ");
+    //take command 4 bytes
+   
+    for(int i=1;i<4;i++) {
+     //char ch=mySerial.read();
+     DOreceiveChar(ch);
+     cmdbuffer[i]=ch;
+     Serial.print(byte(ch));Serial.print(" ");
+    } 
+    Serial.println("]");
    Command=cmdbuffer[0];
    fid=cmdbuffer[1];
    param1=cmdbuffer[2];
    param2=cmdbuffer[3];
  
-   if (Command==OPENFILE || Command==CHANGEDIR)
-    mySerial.readString().toCharArray(fname,30);
-   executeCommand();      
-  }
+   if (Command==OPENFILE || Command==CHANGEDIR) {
+    Serial.println(F("GETTING FILENAME"));
+    textReceive(fname,30);
+   }
+    //mySerial.readString().toCharArray(fname,30);
+   executeCommand();        
 }
