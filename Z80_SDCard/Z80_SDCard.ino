@@ -24,6 +24,7 @@
 #include "SdFat.h"
 #include <SoftwareSerial.h>
 
+//Arduino PINS all pins are crossover with the z80 equivelants i.e. Z80 CTS goes to Ard RTS
 #define CTSpin 4 //White 
 #define RTSpin 5 //red
 #define RX 2     //blue
@@ -52,8 +53,34 @@ SdFile curDir; //current directory
 SdFile curFile;
 int totalFiles;
 char t[20];
+//All commands 1 byte=CMD, 1 byte=ID, 2 bytes=Params  TOTAL 4 bytes
+//for filename we issue a read string after the command
+char cmdbuffer[5]; //incoming command buffer
+char fname[30];
+int Command,fid,param1,param2;
+
+const int OPENCARD=1;
+const int OPENFILE=2;
+const int CLOSEFILE=3;
+const int READBLOCK=6;
+const int WRITEBLOCK=7;
+const int POSITIONS=8;
+const int POSITIONG=9;
+const int LISTDIR=10;
+const int CHANGEDIR=11;
+const int FILESIZE=12;
+const int ENDOFFILE= 13;
+const int INVALIDCMD=99;
+
+const int FCMDOK=200;
+const int FNOTDIR=201;
+const int FNOTFND=202;
+const int FNOMOR=203;
+
+
 
 //FOR rs232 COMMUNICATION
+//Zilog RTS to this CTSpin ,Zilog CTS to this RTS pin
 byte CTS() {
   return digitalRead(CTSpin);
 }
@@ -95,6 +122,7 @@ boolean receiveChar(char &ch) {
 //todo:set a timeout?
 boolean DOreceiveChar(char &ch) { 
   while (!receiveChar(ch)) ;  
+  return true;
 }
 
 void textReceive(char *fn,int ml){
@@ -196,43 +224,6 @@ int getemptyfileidx(){
 }
 
 
-
-//All commands 1 byte=CMD, 1 byte=ID, 2 bytes=Params  TOTAL 6 bytes
-//for filename we issue a read string after the command
-
-//opencard cmd= OCD  [refresh sd card]
-//openfile cmd= OFL id,"fname" 
-//closefile cmd= CFL id
-//readbyte cmd= RBT id [ret byte]
-//writebyte cmd= WBT id,byte
-//readblock cmd= RBL id,noofbytes [loop to send them back]
-//writeblock cmd= WBL id,noofbytes [loop to read an write them to sd]
-//position  cmd= PFL id [ret 2 bytes with position in file]
-//seek cmd = SFL id,newpos [2 bytes]
-
-char cmdbuffer[5]; //incoming command buffer
-char fname[30];
-int Command,fid,param1,param2;
-
-const int OPENCARD=1;
-const int OPENFILE=2;
-const int CLOSEFILE=3;
-const int READBYTE=4;
-const int WRITEBYTE=5;
-const int READBLOCK=6;
-const int WRITEBLOCK=7;
-const int POSITION=8;
-const int SEEKFILE=9;
-const int LISTDIR=10;
-const int CHANGEDIR=11;
-const int FILESIZE=12;
-const int INVALIDCMD=99;
-
-const int FCMDOK=200;
-const int FNOTDIR=201;
-const int FNOTFND=202;
-const int FNOMOR=203;
-
 byte doListDir(){
  int cur=0;
  SdFile entry;
@@ -246,14 +237,14 @@ byte doListDir(){
   while (entry.openNext(&curDir, O_READ)) {
     if (entry.isDir()) {
       sendtext((__FlashStringHelper *)F(" <DIR>  "));
-      Serial.print(F(" <DIR>  "));
+    //  Serial.print(F(" <DIR>  "));
     }
     else{    
       sendtext((__FlashStringHelper *)F("        "));
-      Serial.print((__FlashStringHelper *)F("        "));
+    //  Serial.print((__FlashStringHelper *)F("        "));
     }
     entry.getName(fBuffer,35);sendtext(fBuffer);sendNL(); 
-    entry.printName(&Serial);Serial.println();
+   // entry.printName(&Serial);Serial.println();
     cur++;
     entry.close();
   }
@@ -264,82 +255,62 @@ byte doListDir(){
  return 200;
 }
 
-byte findFile(SdFile &fl){
-  char fnm[30];
-  
-  
-  Serial.print("Search File:[");Serial.print(fname);Serial.println("]");
-  Serial.println(byte(fname[7]));
-  Serial.println(byte(fname[8]));
-  Serial.println(byte(fname[9]));
-  //curDir.printName(&Serial);
-  curDir.rewind();
-  while (fl.openNext(&curDir, O_RDONLY)) {    
-    fl.getName(fnm, 30);
-    //Serial.print("[");Serial.print(fnm);Serial.print("]-[");Serial.print(fname);Serial.println("]");
-    //Serial.println(strcmp(fname,fnm));
-    if (strcmp(fname,fnm)==0)
-      return FCMDOK; 
-    fl.close();   
-  }
-  Serial.println("...Not found");
-  return FNOTFND;
-}
-
 byte doChangeDir(){
   SdFile fl;
 
-  
-  if (findFile(fl)==FCMDOK){
+  if (fl.open(fname, O_READ)){
       if (fl.isDir()){
         curDir.close();
         curDir=fl;
         Serial.println(F("Dir Change OK"));
         return FCMDOK; //all ok
       }    
-      else return FNOTDIR; //dir name is not a dir
+      else {
+        fl.close();
+        return FNOTDIR; //dir name is not a dir
+      }
   }
   else return FNOTFND;//dir name NOT FOUND
-  
-}
-
-byte doChangeDir1(){
-  char fnm[30];
-  SdFile fl;
-
-  
-  //Serial.print("ChgDir:");Serial.println(fname);
-  //curDir.printName(&Serial);
-  curDir.rewind();
-  while (fl.openNext(&curDir, O_RDONLY)) {    
-    fl.getName(fnm, 30);
-    //Serial.print("[");Serial.print(fnm);Serial.print("]-[");Serial.print(fname);Serial.println("]");
-    //Serial.println(strcmp(fname,fnm));
-    if (strcmp(fname,fnm)==0){
-      if (fl.isDir()){
-        curDir.close();
-        curDir=fl;
-        Serial.println(F("Dir Change OK"));
-        return 200; //all ok
-      }
-      else return 200+1; //dir name is not a dir
-    }
-    fl.close();   
-  }
-
-   return 200+2; //dir name not found
   
 }
 
 byte doOpenFile(){
  SdFile fl;
 
- if (findFile(fl)!=FCMDOK){
-    return FNOTFND; //file not found
-  }  
+ if (param1==0) {
+    if (!fl.open(fname, O_READ)) {
+      Serial.println(F("File Not found"));
+      return FNOTFND;
+    }
+    Serial.println(F("File open for read"));
+ }
+ if (param1==1) {//==Write file
+     if (!fl.open(fname, O_WRITE)) {
+      Serial.println(F("File Not found"));
+      return FNOTFND;
+     }
+     Serial.println(F("File open for write"));
+ }
+ if (param1==2) {//==Read/Write file
+     if (!fl.open(fname, O_RDWR)) {
+      Serial.println(F("File Not found"));
+      return FNOTFND;
+     }
+     Serial.println(F("File open for read/write"));
+ }
+ if (param1==4) {//==Create file
+     if (!fl.open(fname, O_CREAT | O_RDWR)) {
+      Serial.println(F("File can not be created"));
+      return FNOTFND;
+     }
+     Serial.println(F("File created and open for read/write"));
+ }
   
   int idx=getemptyfileidx();
-  if (idx==-1) return FNOMOR; //no more open files
+  if (idx==-1) {
+    fl.close();
+    return FNOMOR; //no more open files
+  }
   filelist[idx].fid=idx+1;
   filelist[idx].file=fl;
   return idx;
@@ -377,12 +348,29 @@ byte doReadBlock(byte idx){
  return FCMDOK; 
 }
 
+byte doWriteBlock(byte idx){
+   SdFile fl;
+   char ch;
+   
+   fl=filelist[idx].file;
+   int btow=param1*256+param2;
+   Serial.print(F("Bytes to write:"));Serial.println(btow);
+   Serial.println(F("Writing bytes.."));   
+   for (int i=0;i<btow;i++) {
+    DOreceiveChar(ch);
+    fl.write(ch);
+   }
+  Serial.println(F("ok"));   
+  return FCMDOK;   
+}
+
+
+//RETURNS FILESIZE
 byte doFilesize(byte idx){
    SdFile fl;
-   
-   if (findFile(fl)!=FCMDOK){
-    return FNOTFND; //file not found
-  }  
+
+  fl=filelist[idx].file;
+
   int sz=fl.fileSize();
   byte bh=sz/256;
   byte bl=sz%256;
@@ -390,17 +378,37 @@ byte doFilesize(byte idx){
   return FCMDOK; 
 }
 
-byte doPosition(byte idx){
+//SETS THE POSITION
+byte doSetPosition(byte idx){
    SdFile fl;
    
-   if (findFile(fl)!=FCMDOK){
-    return FNOTFND; //file not found
-  }  
+  fl=filelist[idx].file;
+  
+  int newpos=param1*256+param2;
+  fl.seekSet(newpos); //from the start of file
+  return FCMDOK; 
+}
+
+//RETURNS THE POSITION
+byte doGetPosition(byte idx){
+   SdFile fl;
+   
+  fl=filelist[idx].file;
+  
   int pos=fl.curPosition();
   byte bh=pos/256;
   byte bl=pos%256;
   sendChar(bh);sendChar(bl);
   return FCMDOK; 
+}
+
+
+byte doGetEOF(byte idx){
+   SdFile fl;
+   
+  fl=filelist[idx].file;
+  if (fl.peek()==-1) return 255;
+   else return FCMDOK;  
 }
 
 void executeCommand(){
@@ -415,20 +423,21 @@ void executeCommand(){
                     break;
     case CLOSEFILE: retparam=doCloseFile(fid);
                     break;
-    case READBYTE: break;
-    case WRITEBYTE: break;
     case READBLOCK: retparam=doReadBlock(fid);
                     break;
     case WRITEBLOCK: break;
-    case POSITION:  retparam=doPosition(fid);
+    case POSITIONS: retparam=doSetPosition(fid);
                     break;
-    case SEEKFILE: break;
+    case POSITIONG:  retparam=doGetPosition(fid);
+                    break;                    
     case LISTDIR:   retparam=doListDir();//todo:check if we have a name with the command and list that dir if exists
                     break;
     case CHANGEDIR: retparam=doChangeDir();
                     break;  
     case FILESIZE:  retparam=doFilesize(fid);
                     break;
+    case ENDOFFILE: retparam=doGetEOF(fid);  
+                    break;                 
   }
 
   sendChar(char(retparam));//always return a command result to Z80
@@ -480,6 +489,10 @@ void loop5(){
       loop2();  
     Serial.println("S,R");  
   }
+}
+
+void loop99(void) {
+  loop2();
 }
 
 void loop(void) {
