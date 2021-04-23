@@ -276,30 +276,37 @@ byte doChangeDir(){
 
 byte doOpenFile(){
  SdFile fl;
+ char fullname[40];
+
+ curDir.getName(fullname,40); 
+ strcat(fullname,"/");
+ strcat(fullname,fname);
+
+ Serial.println(fullname);
 
  if (param1==0) {
-    if (!fl.open(fname, O_READ)) {
+    if (!fl.open(fullname, O_READ)) {
       Serial.println(F("File Not found"));
       return FNOTFND;
     }
     Serial.println(F("File open for read"));
  }
  if (param1==1) {//==Write file
-     if (!fl.open(fname, O_WRITE)) {
+     if (!fl.open(fullname, O_WRITE)) {
       Serial.println(F("File Not found"));
       return FNOTFND;
      }
      Serial.println(F("File open for write"));
  }
  if (param1==2) {//==Read/Write file
-     if (!fl.open(fname, O_RDWR)) {
+     if (!fl.open(fullname, O_RDWR)) {
       Serial.println(F("File Not found"));
       return FNOTFND;
      }
      Serial.println(F("File open for read/write"));
  }
  if (param1==4) {//==Create file
-     if (!fl.open(fname, O_CREAT | O_RDWR)) {
+     if (!fl.open(fullname, O_CREAT | O_RDWR)) {
       Serial.println(F("File can not be created"));
       return FNOTFND;
      }
@@ -329,10 +336,13 @@ byte doReadBlock(byte idx){
   //read a block of bytes of a file
   //Z80 asks an amount ARD returns the bytes that will be sent <=Z80 request
   fl=filelist[idx].file;
+
+  //Serial.println(fl.fileSize());
+  //Serial.println(fl.curPosition());
  
   int z80ask=param1*256+param2; //2bytes 
   int bytesleft=fl.fileSize()-fl.curPosition();
-  if ((z80ask==0) or (bytesleft<z80ask)) z80ask=bytesleft;  
+  if ((z80ask==0) || (bytesleft<z80ask)) z80ask=bytesleft;  
   //send back the size we will send
   byte bh=z80ask/256;
   byte bl=z80ask%256;
@@ -521,8 +531,9 @@ void loop(void) {
    param2=cmdbuffer[3];
  
    if (Command==OPENFILE || Command==CHANGEDIR) {
-    Serial.println(F("GETTING FILENAME"));
+    Serial.print(F("GETTING FILENAME:"));
     textReceive(fname,30);
+    Serial.println(fname);
    }
     //mySerial.readString().toCharArray(fname,30);
    executeCommand();        
