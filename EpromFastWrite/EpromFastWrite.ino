@@ -22,20 +22,24 @@ void setAddr(unsigned int ad){
  unsigned int b;
 
   for (int i=0;i<16;i++){
-   b=ad & (1 << i);
+   b=ad & (1 << i);    
+  // Serial.print("ab=");Serial.println(b);
    if (b==0) digitalWrite(AddrPins[i],LOW);
     else digitalWrite(AddrPins[i],HIGH);    
   } 
+  delay(1);
 }
 
 void setData(byte dat){
  byte b;
 
   for (int i=0;i<8;i++){
-   b=dat & (1 << i);
+   b=dat & (1 << i);   
+  // Serial.print("pin=");Serial.print(DataPins[i]);Serial.print("=");Serial.println(b);
    if (b==0) digitalWrite(DataPins[i],LOW);
     else digitalWrite(DataPins[i],HIGH);    
   }  
+  delay(1);
 }
 
 byte getData(){
@@ -45,6 +49,7 @@ byte b;
   for (int i=0;i<8;i++){
     if (digitalRead(DataPins[i])==HIGH)
       b|= (1 << i);
+      //Serial.print("db=");Serial.println(b);
   }
   return b;
 }
@@ -72,10 +77,15 @@ unsigned int i;
   digitalWrite(WR,HIGH);   
   setDataInput();
   digitalWrite(CE,LOW);  
+  digitalWrite(RD,LOW);
   for (i=0;i<lensize;i++){      
-      digitalWrite(RD,LOW);
-      b=getData();      
-      digitalWrite(RD,HIGH);      
+      
+      b=getData();     
+      b=getData(); 
+      b=getData(); 
+      b=getData(); 
+      b=getData(); 
+      //digitalWrite(RD,HIGH);      
       Serial.write(b);
       addr++;
       setAddr(addr);
@@ -83,6 +93,7 @@ unsigned int i;
 }
 
 void writeByte(unsigned int addr,byte b){
+
   digitalWrite(RD,HIGH);
   setDataOutput();
   setAddr(addr);
@@ -96,17 +107,29 @@ void doMultiWrite(unsigned int addr,unsigned int lensize){
 byte b;
 unsigned int i;
   
-  digitalWrite(RD,HIGH);
-  setDataOutput();
-  digitalWrite(CE,LOW);  
+   digitalWrite(RD,HIGH);
+     setDataOutput();
+   digitalWrite(CE,LOW);
+     
+  
   i=0;
-  do {
+  do {    
      setAddr(addr);
      if (Serial.available() > 0) {
       b=Serial.read();
-      setData(b);
+      //writeByte(addr,b);
+      if (i<1) delay(1000);
+      Serial.write(b); //send back
+      setData(b);     
       digitalWrite(WR,LOW);
-      digitalWrite(WR,HIGH);      
+      digitalWrite(WR,HIGH); 
+      digitalWrite(WR,LOW);
+      digitalWrite(WR,HIGH); 
+      
+      //digitalWrite(CE,HIGH);   
+    // digitalWrite(CE,HIGH);
+   //digitalWrite(WR,HIGH);
+   //digitalWrite(RD,LOW);              
       i++;addr++;
      }
   } while (i<lensize);
@@ -116,12 +139,13 @@ void doPermanent(){
 const unsigned int Addresses[] = {0x0E38, 0x31C7, 0x03E0, 0x3C1F, 0x303F, 0x0FC0}; 
 
   setDataInput();
-  digitalWrite(RD,LOW);
   digitalWrite(CE,HIGH);
+  digitalWrite(RD,LOW);  
   digitalWrite(WR,HIGH);
   for (int i=0;i<6;i++){
     setAddr(Addresses[i]);
     digitalWrite(CE,LOW);
+    delay(1);
     digitalWrite(CE,HIGH);
   }
   digitalWrite(RD,HIGH);
@@ -150,7 +174,7 @@ void showMenu(){
   Serial.println("w:write byte (w addr,byte)");
   Serial.println("br:binary read bytes (br addr,length)");
   Serial.println("bw:binary write bytes (bw addr,length)");
-  Serial.println("q:permanent save bytes");
+  Serial.println("p:permanent save bytes");
   Serial.println("z:recall bytes");
 }
 
@@ -165,7 +189,7 @@ void setup() {
   pinMode(CE,OUTPUT);
   pinMode(RD,OUTPUT);
 
-  Serial.println("Intialisation complete");  
+  Serial.println("Initialisation complete");  
   showMenu();
 }
 
@@ -175,7 +199,9 @@ unsigned int addr,nobytes;
 byte b;
 String s,s1,s2;
 
-  // put your main code here, to run repeatedly:
+  digitalWrite(CE,HIGH);
+   digitalWrite(WR,HIGH);
+   digitalWrite(RD,LOW);
   if (Serial.available() > 0) {
    c=Serial.read();
    switch (c){
@@ -207,7 +233,7 @@ String s,s1,s2;
               doMultiWrite(addr,nobytes);
              if (c=='r') 
               doMultiRead(addr,nobytes);              
-             Serial.println("Multi Command Succesful"); 
+             Serial.println("Multi Command Succesfull"); 
              break;
     case 'p':doPermanent();
              Serial.println("EEprom Permanent Stored");
@@ -219,5 +245,6 @@ String s,s1,s2;
              break;  
    }
 
+  
   }
 }
