@@ -1,0 +1,22 @@
+###########################################
+# Syntax Coloring Map For UltraDistSensor
+###########################################
+
+###########################################
+# Datatypes (KEYWORD1)
+###########################################
+
+UltraDistSensor	KEYWORD1
+###########################################
+# Methods and Functions (KEYWORD2)
+###########################################
+
+distanceInInch	KEYWORD2
+distanceInCm	KEYWORD2
+changeTimeout	KEYWORD2
+attach	KEYWORD2
+
+Constants (LITERAL1)
+
+Cm	LITERAL1	Constants
+Inch	LITERAL1	Constants
