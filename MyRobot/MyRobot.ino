@@ -16,7 +16,7 @@ void setup() {
 
 void gest1(){
  // rightHand.moveFinger(4,fingOpen);
- // rightHand.moveFinger(3,fingOpen);
+ // rightHand.moveFinger(3,fingOpen); 
 //  rightHand.moveFinger(2,fingClose);
  // rightHand.moveFinger(1,fingClose);
  // rightHand.moveFinger(0,fingClose); 
@@ -25,34 +25,25 @@ void gest1(){
 }
 
 void gest2(){
-  //rightHand.moveFinger(4,fingOpen);
- // rightHand.moveFinger(3,fingOpen);
- // rightHand.moveFinger(2,fingClose);
- // rightHand.moveFinger(1,fingClose);
- // rightHand.moveFinger(0,fingOpen); 
-
   rightHand.setPosfingers(fO,fC,fC,fO,fO);   
 }
 
 void gest3(){
- // rightHand.moveFinger(4,fingOpen);
- // rightHand.moveFinger(3,fingClose);
- // rightHand.moveFinger(2,fingClose);
- // rightHand.moveFinger(1,fingClose);
- // rightHand.moveFinger(0,fingClose);
-
   rightHand.setPosfingers(fC,fC,fC,fC,fO);         
 }
 
 void gest4(){
-  rightHand.moveFinger(4,fingClose);
-  rightHand.moveFinger(3,fingClose);
-  rightHand.moveFinger(2,fingOpen);
-  rightHand.moveFinger(1,fingClose);
-  rightHand.moveFinger(0,fingClose); 
-
-  //rightHand.setPosfingers(fC,fC,fO,fC,fC);   
+  rightHand.setPosfingers(fO,fC,fO,fC,fO);   
 }
+
+void gest5(){
+   rightHand.setPosfingers(fC,fO,fO,fO,fC);   
+}
+
+void gest6(){
+   rightHand.setPosfingers(fO,fC,fC,fC,fO);   
+}
+
 
 void allopen(){
  // for (int i=0;i<5;i++)
@@ -105,9 +96,11 @@ void loop() {
         case 2:gest2();break;
         case 3:gest3();break;
         case 4:gest4();break;
-        case 6:wristleft();break;
-        case 7:wristnorm();break;
-        case 8:wristright();break;
+        case 5:gest5();break;
+        case 6:gest6();break;
+        case 7:wristleft();break;
+        case 8:wristnorm();break;
+        case 9:wristright();break;        
         default: allopen();
       }
       

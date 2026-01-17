@@ -80,15 +80,16 @@ unsigned int i;
   digitalWrite(RD,LOW);
   for (i=0;i<lensize;i++){      
       
-      b=getData();     
-      b=getData(); 
-      b=getData(); 
-      b=getData(); 
+     // b=getData();     
+      //b=getData(); 
+      //b=getData(); 
+      //b=getData(); 
       b=getData(); 
       //digitalWrite(RD,HIGH);      
       Serial.write(b);
       addr++;
       setAddr(addr);
+      delay(2); //5 is working ok
      }
 }
 

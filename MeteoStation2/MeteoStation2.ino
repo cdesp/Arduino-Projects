@@ -1,20 +1,28 @@
-#include <Narcoleptic.h>
-#include <SFE_BMP180.h>
-#include <RTClib.h>
+//#include <Narcoleptic.h>
+//#include <SFE_BMP180.h>
+#include <Adafruit_BMP280.h>
 #include <SPI.h>
 #include <SD.h>
 #include "DHT.h"
+#include <RTClib.h>
+#include <avr/wdt.h>
+#include <avr/sleep.h>
+#include <EEPROM.h>
+
+
+#define ON HIGH
+#define OFF LOW
 
 #define ALTITUDE 280.0 
-#define usenarco 1
 
 #define pAnmmeter 2
 #define pAnmdeikt A0
 #define pRainmeter A1
-#define pDHTemp 9  //8   // what digital pin we're connected to
+#define pDHTemp 6//9  //8   // what digital pin we're connected to
 #define CSPin 10
-#define btoothrx 3
+#define btoothrx 5
 #define btoothtx 4
+#define powerPin 8  //controls power to the sensors
 
 
 // Uncomment whatever type you're using!
@@ -32,14 +40,17 @@
 // tweak the timings for faster processors.  This parameter is no longer needed
 // as the current DHT reading algorithm adjusts itself to work on faster procs.
 DHT dht(pDHTemp, DHTTYPE);
-SFE_BMP180 bmp;
+//SFE_BMP180 bmp;
+Adafruit_BMP280 bmp; // I2C Interface
 RTC_DS1307 RTC;      // RTC Module
+
 
 
 volatile int cnt=0;
 int cntpersec=0;
+int times;
 unsigned long mytime;
-int anmdeik,avgWindSpeed;
+int anmdeik,avgWindSpeed,maxWindSpeed,sumWindSpeed;
 
 double h,t,hic;
 int rainmeter;//to ypsos ths broxhs
@@ -47,6 +58,9 @@ double dew,dewf;
 
 double relP,Pres,bmpTemp;
 DateTime now;
+int sleeptime=30; //the minutes to sleep
+int fileevery=1; //the minutes  to write to file after wake up means sampling sensors for fileevery minutes then goto sleep
+int airevery=10; //the seconds to  calc the air speed 10 means sample for 10 secs then  do the calcs
 
 //---SD---
 File myFile;
@@ -58,34 +72,58 @@ void aircnt()
 }
 
 
-void setup() {
-  // put your setup code here, to run once:
+void mysetup(){
+  
   Serial.begin(115200);
+  Serial.println("S"); 
+  pinMode(powerPin,OUTPUT);
+  powerSensors(ON);    
+  delay(4000);  
+ 
   pinMode(pAnmdeikt,INPUT);
-  pinMode(pAnmmeter,INPUT);
+  pinMode(pAnmmeter,INPUT);  
   attachInterrupt(digitalPinToInterrupt(pAnmmeter), aircnt, CHANGE);
   cntpersec=0;
 
+
+  
   //--SD Card
   if (!SD.begin(CSPin)) 
-    Serial.println(F("SDCard failed!"));
-  else  
-   Serial.println(F("SDCard OK."));
+    Serial.println(F("SD err!"));
+  //else  
+  // Serial.println(F("SDCard OK."));
   
   dht.begin();
+//Serial.println("B"); 
 
 
-  if (bmp.begin()) 
-    Serial.println(F("BMP180 success"));
-  else
-  {
+  //if (bmp.begin()) 
+ //   Serial.println(F("BMP180 success"));
+ // else
+ // {
     // Oops, something went wrong, this is usually a connection problem,
     // see the comments at the top of this sketch for the proper connections.
 
-    Serial.println(F("BMP180 fail\n\n"));    
-  }  
+ //   Serial.println(F("BMP180 fail\n\n"));    
+ // }  
 
+  
+  if (!bmp.begin(BMP280_ADDRESS_ALT, BMP280_CHIPID)) {
+    Serial.println(F("BMP280 err!"));
+  }
+  else {
+    //Serial.println(F("BMP280 ok!"));
+  /* Default settings from datasheet. */
+  bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,     /* Operating Mode. */
+                  Adafruit_BMP280::SAMPLING_X2,     /* Temp. oversampling */
+                  Adafruit_BMP280::SAMPLING_X16,    /* Pressure oversampling */
+                  Adafruit_BMP280::FILTER_X16,      /* Filtering. */
+                  Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
+  }
+
+//Serial.println("R");
     // Initialisiere RTC
+
   RTC.begin();
 
    // Prüfen ob RTC läuft  
@@ -94,29 +132,53 @@ void setup() {
     // Set the current date and time if the clock is not running yet
     RTC.adjust(DateTime(__DATE__, __TIME__));
     
-    Serial.println(F("RTC was started and set to system time."));
+    Serial.println(F("RTC no bat?"));
   }
-  else Serial.println(F("RTC is already running."));
+  //else Serial.println(F("RTC ok."));
 
   
-  Serial.println("Setup ok");  
+  Serial.println("OK");    
   mytime = millis();
+  everySecs(0);  
+  times=0;
 }
 
+
+void setup(){
+  int t1;  
+
+  wdt_disable();
+  t1=EEPROM.read(0);
+  if (t1> sleeptime*8)  {  //8 times for a minute
+    EEPROM.put(0, 0);
+    mysetup();
+    wdt_enable(WDTO_8S);
+  }
+  else {
+    Serial.begin(115200);
+    EEPROM.put(0, t1+1); //increase the value
+    Serial.println(t1); 
+    wdt_enable(WDTO_8S);   
+    gotosleep();  //go back to sleep
+    
+  }    
+  
+}
 
 
 //Celsius to Fahrenheit conversion
-double Fahrenheit(double celsius)
-{
-  return 1.8 * celsius + 32;
-}
+//double Fahrenheit(double celsius)
+//{
+//  return 1.8 * celsius + 32;
+//}
 
 //Celsius to Kelvin conversion
-double Kelvin(double celsius)
-{
-  return celsius + 273.15;
-}
+//double Kelvin(double celsius)
+//{
+ // return celsius + 273.15;
+//}
 
+/*
 // dewPoint function NOAA
 // reference: http://wahiduddin.net/calc/density_algorithms.htm 
 double dewPoint(double celsius, double humidity)
@@ -131,7 +193,7 @@ double dewPoint(double celsius, double humidity)
   double T = log(VP/0.61078);   // temp var
   return (241.88 * T) / (17.558-T);
 }
-
+*/
 // delta max = 0.6544 wrt dewPoint()
 // 5x faster than dewPoint()
 // reference: http://en.wikipedia.org/wiki/Dew_point
@@ -157,7 +219,7 @@ boolean getHumTemp(){
 
   // Check if any reads failed and exit early (to try again).
   if (isnan(h) || isnan(t) ) {
-    Serial.println(F("DHT sensor FAILED!"));
+   // Serial.println(F("DHT err"));
     return false;
   }
   // Compute heat index in Celsius (isFahreheit = false)
@@ -172,8 +234,20 @@ void getRainMeter(){
   rainmeter = analogRead(pRainmeter);
 }
 
+//for bmp280
+void getPressure280(){
+  double T,P,p0,a;
 
+  bmp.takeForcedMeasurement();
+  bmpTemp=bmp.readTemperature();
+  P=bmp.readPressure();
+  Pres=P/100;
+  a=bmp.readAltitude(1019.66);
+  relP = bmp.seaLevelForAltitude(ALTITUDE,P)/100;
 
+}
+
+/* for bmp180
 void getPressure(){
   char status;
   double T,P,p0,a;
@@ -267,6 +341,8 @@ void getPressure(){
  
 }
 
+*/
+
 void getDTime(){
 
   now=RTC.now(); // aktuelle Zeit abrufen
@@ -299,9 +375,9 @@ bool everySecs(int secs){
 
  getDTime();
 
- if (( now.get() - prevtime)>secs ) {
+ if (( now.unixtime() - prevtime)>secs ) {
 
-   prevtime = now.get();
+   prevtime = now.unixtime();
    return true;
  }
 
@@ -363,8 +439,8 @@ void wDateTime(){
 void writetofile(){
   //print time p.x. 29.07.2018,14:28:49
   wDateTime(); 
- //humidity,temperature,heat,rain,dewfast,dew,pressure,rel pressure,temperature,wind speed, wind avg,wind dir
-  wfile(h);wfile(t);wfile(hic);wfile(rainmeter);wfile(dewf);wfile(dew);wfile(Pres);wfile(relP);wfile(bmpTemp);wfile(cntpersec);wfile(avgWindSpeed);wfile(getWindDirection(anmdeik));
+ //humidity,temperature,heat,rain,dewfast,dew,pressure,rel pressure,temperature,max wind speed per sec, wind avg per sec,wind dir
+  wfile(h);wfile(t);wfile(hic);wfile(rainmeter);wfile(dewf);wfile(dewf);wfile(Pres);wfile(relP);wfile(bmpTemp);wfile(maxWindSpeed);wfile(avgWindSpeed);wfile(getWindDirection(anmdeik));
   myFile.println("");
 }
 
@@ -385,26 +461,26 @@ void saveToFile(){
 
 //===================================
 void prnSensors(){
-  Serial.print(F("Humidity: "));
+  Serial.print(F("Hum "));
   Serial.print(h);
   Serial.print(" %\t");
-  Serial.print(F("Temperature: "));
+  Serial.print(F("T "));
   Serial.print(t);
   Serial.print(" *C ");
-  Serial.print(F("Heat index: "));
+  Serial.print(F("Heat "));
   Serial.print(hic);
   Serial.println(" *C ");  
-  Serial.print(F("Rain Height: "));  Serial.print(rainmeter);
-  Serial.print(F("\tDewFast: "));  Serial.print(dewf);
-  Serial.print(F("\tDew: "));  Serial.print(dew);
+  Serial.print(F("Rn : "));  Serial.print(rainmeter);
+  Serial.print(F("\tDew: "));  Serial.print(dewf);
+ // Serial.print(F("\tDew: "));  Serial.print(dew);
   Serial.println(" ");
-  Serial.print(F("Absolute pressure: "));
+  Serial.print(F("pr: "));
   Serial.print(Pres,2);
-  Serial.print(" mb, ");
-  Serial.print(F("Relative (sea-level) pressure: "));
+  //Serial.print(" mb, ");
+  Serial.print(F("pr R: "));
   Serial.print(relP,2);
-  Serial.print(F(" mb, "));
-  Serial.print(F("Temperature: "));
+ // Serial.print(F(" mb, "));
+  Serial.print(F("T2: "));
   Serial.print(bmpTemp);
   Serial.println(" ");
 }
@@ -412,7 +488,7 @@ void prnSensors(){
 void prnDateTime() {
 
  // Wochentag, Tag.Monat.Jahr
-  Serial.print(get_day_of_week(now.dayOfWeek()));
+  Serial.print(get_day_of_week(now.dayOfTheWeek()));
   Serial.print(", ");
   if(now.day()<10)Serial.print(0);
   Serial.print(now.day(),DEC);
@@ -436,10 +512,11 @@ void prnDateTime() {
 
 void prnAnemo(){
 
-    Serial.print(F("Wind speed:"));Serial.print(cntpersec);  Serial.print(F("  "));
-    Serial.print(F("Average wind speed:"));Serial.println(avgWindSpeed);        
-    Serial.print(F("Direction:"));Serial.print(anmdeik); Serial.print(F("("));
-    prnWindDirection(getWindDirection(anmdeik));Serial.print(F(")"));
+    Serial.print(("Wind spd:"));Serial.print(cntpersec);  Serial.print(("  "));
+  //  Serial.print(("Avg :"));Serial.print(avgWindSpeed); Serial.print(("  "));        
+   // Serial.print(("Max :"));Serial.println(maxWindSpeed);        
+   // Serial.print(("Dir:"));Serial.print(anmdeik); Serial.print(("("));
+    prnWindDirection(getWindDirection(anmdeik));Serial.print((")"));
 }
 
 void prnWindDirection(int w){
@@ -456,15 +533,60 @@ void prnWindDirection(int w){
   
 }
 
+void getReadings(){
+  getHumTemp();
+  getRainMeter();
+  dewf=dewPointFast(t,h);
+  //dew=dewPoint(t,h);
+  getPressure280();
+  anmdeik=getAnemodeikt();
+  getDTime();
+}
+
+void  prnDataToSerial(){
+  prnDateTime();
+  prnSensors();
+  prnAnemo();
+
+  Serial.println("");
+  Serial.println("");
+  
+}
+
+
+void gotosleep(){
+  wdt_reset();
+ // Serial.println("slp");
+ // Serial.flush();  
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN); 
+  sleep_enable();
+ // Now enter sleep mode. 
+  sleep_mode();  
+ // Serial.println("wake");
+ // Serial.flush();    
+}
+
+void powerSensors(uint8_t pwrstatus){
+  digitalWrite(powerPin,pwrstatus);   
+  if (pwrstatus==ON) {
+    delay(2000);//delay to power on the devices
+  }
+}
+
 void loop() {
   // put your main code here, to run repeatedly:
   String incoming,dts,tms,hs,ms,ys,mns,ds;
+  int t1;
 
+  wdt_reset();
+  
   if (Serial.available() > 0) {
     // read the incoming byte:
     
     incoming = Serial.readString();
-    if (incoming.charAt(0)=='D' || incoming.charAt(0)=='T'){
+      Serial.println(incoming);
+      //D26/07/2022 19:07
+    if (incoming.charAt(0)=='D'){
       dts=incoming.substring(1,11);
       ds=dts.substring(0,2);
       mns=dts.substring(3,5);
@@ -473,7 +595,7 @@ void loop() {
       hs=tms.substring(0,2);
       ms=tms.substring(3,5);
       //Serial.println(dts);
-      //Serial.println(tms);
+      //Serial.println(tms);    
 
     //  Serial.println(ys.toInt());
       dts=ds+"/"+mns+"/"+ys+" ";
@@ -482,40 +604,41 @@ void loop() {
       
       Serial.print(dts);
       Serial.println(tms);
-      Serial.println("DATE TIME is set.");
-     }          
+      Serial.println("set");
+     }         
+     if (incoming.charAt(0)=='P'){ 
+      getReadings();
+      prnDataToSerial();
+     }
   }
 
- if (millis()-mytime>=1000) {     
-    cntpersec=cnt;cnt=0;mytime = millis();
-    avgWindSpeed=(avgWindSpeed+cntpersec) / 2;
+
+ //avg air  speed calculations
+ if (millis()-mytime>=airevery*1000) {     //secs time to calc air  speed
+    cntpersec=cnt/airevery ;cnt=0;mytime = millis();
+    sumWindSpeed=sumWindSpeed+cntpersec ;
+    avgWindSpeed=sumWindSpeed/++times;
+    if (maxWindSpeed<cntpersec)
+      maxWindSpeed=cntpersec;
   }  
 
-if (everySecs(5)) {
-  getHumTemp();
-  getRainMeter();
-  dewf=dewPointFast(t,h);
-  dew=dewPoint(t,h);
-  getPressure();
-  anmdeik=getAnemodeikt();
-  getDTime();
+if (everySecs(fileevery*60)) {  //mins save data?
 
-  prnDateTime();
-  prnSensors();
-  prnAnemo();
-
-  Serial.println("");
-  Serial.println("======================================= ");
-
+  wdt_reset();
+  getReadings();
+  wdt_reset();
+  prnDataToSerial();
+  wdt_reset();
   saveToFile();
+  wdt_reset();
   
-  if (usenarco==1) {
-     Narcoleptic.delay(10000);
-     everySecs(0);//reset timer
-  }
+  maxWindSpeed=0; times=0; 
+  powerSensors(OFF);
+  gotosleep();
+  //Serial.println("wake");
  }
 
  
   
-  
+  wdt_reset();
 }

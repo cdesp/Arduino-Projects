@@ -5,7 +5,7 @@
 #include <SD.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>  // F Malpartida's NewLiquidCrystal library
-#include <MemoryFree.h>
+//#include <MemoryFree.h>
 #include <SoftwareSerial.h>
 
 #define butPlay A0
@@ -24,6 +24,7 @@
 
 //LCD 16x2
 #define I2C_ADDR    0x27  // Define I2C Address for controller
+#define BACKLIGHT_PIN     13
 
 SoftwareSerial   NBSerial(RX, TX, false); // RX, TX
 LiquidCrystal_I2C lcd(I2C_ADDR, 16, 2); // set the LCD address to 0x27 for a 16 chars and 2 line display
@@ -137,9 +138,11 @@ void setup() {
   //  scanWire();
   // Switch on the backlight
   lcd.init();
+  // Switch on the backlight 
   lcd.backlight();
   lcd.clear();
-  lcd.print(F("LCD OK!!!")); delay(2000);
+  lcd.print(F("LCD OK!!!")); 
+  delay(2000);
 
 
   openRoot();
@@ -265,6 +268,7 @@ boolean sendChar(char c) {
   do { brk=butStopPressed(); } while ((CTS() == HIGH) and (not brk)); //if NB can read
   if (!brk)   
     NBSerial.write(c);  //send
+  else NBSerial.flush();  //5/7/2024 to clear send buffer;  
   RTSON();
 
   return !brk;
@@ -532,8 +536,8 @@ void loop() {
              printDirectory(myFile,0);
              myFile.close();
              break;*/
-    case 'f':  Serial.print(F("freeMemory()="));
-      Serial.println(freeMemory());
+ //   case 'f':  Serial.print(F("freeMemory()="));
+  //    Serial.println(freeMemory());
       break;
     case 'g'://get a file from NB
       break;
@@ -555,4 +559,3 @@ void loop() {
   }
 
 }
-
